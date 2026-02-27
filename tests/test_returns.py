@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from quant_stack.returns import simple_return, log_return, cumulative_returns
+from src.quant_stack.returns import simple_return, log_return, cumulative_returns
 
 
 class TestSimpleReturn:

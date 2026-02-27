@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from quant_stack.indicators import sma, ema, rsi, macd, bollinger_bands
+from src.quant_stack.indicators import sma, ema, rsi, macd, bollinger_bands
 
 
 # ---------------------------------------------------------------------------

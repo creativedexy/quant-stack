@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from quant_stack.pricing import black_scholes_call, black_scholes_put
+from src.quant_stack.pricing import black_scholes_call, black_scholes_put
 
 
 class TestBlackScholesCall:

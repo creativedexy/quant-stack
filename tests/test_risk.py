@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from quant_stack.risk import volatility, sharpe_ratio, max_drawdown
+from src.quant_stack.risk import volatility, sharpe_ratio, max_drawdown
 
 
 class TestVolatility:

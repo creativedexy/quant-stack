@@ -1,0 +1,50 @@
+general:
+  base_currency: GBP
+  timezone: Europe/London
+  log_level: INFO
+  data_dir: data
+  random_seed: 42
+
+universe:
+  name: default
+  tickers: ["SHEL.L", "BP.L", "HSBA.L", "AZN.L", "ULVR.L"]
+  benchmark: "^FTSE"
+
+data:
+  source: synthetic
+  start_date: "2020-01-01"
+  end_date: null
+  interval: 1d
+  fields: ["Open", "High", "Low", "Close", "Volume"]
+  adjust_prices: true
+  output_format: parquet
+
+indicators:
+  sma:
+    windows: [5, 10, 20, 50, 200]
+
+  ema:
+    windows: [12, 26]
+
+  rsi:
+    window: 14
+
+  macd:
+    fast: 12
+    slow: 26
+    signal: 9
+
+  bollinger_bands:
+    window: 20
+    num_std: 2.0
+
+  atr:
+    window: 14
+
+features:
+  technical:
+    sma_windows: [5, 20, 50]
+    rsi_window: 14
+  returns:
+    windows: [1, 5, 21]
+    log_returns: true

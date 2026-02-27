@@ -77,3 +77,37 @@ def ohlcv_with_missing(sample_ohlcv: pd.DataFrame) -> pd.DataFrame:
     # Ensure index stays clean
     df.index = sample_ohlcv.index
     return df
+
+
+@pytest.fixture
+def flat_ohlcv() -> pd.DataFrame:
+    """50-row OHLCV DataFrame where every price is constant at 100."""
+    n = 50
+    dates = pd.bdate_range(start="2024-01-02", periods=n, freq="B")
+    price = np.full(n, 100.0)
+    return pd.DataFrame(
+        {
+            "Open": price.copy(),
+            "High": price.copy(),
+            "Low": price.copy(),
+            "Close": price.copy(),
+            "Volume": np.full(n, 10_000, dtype=int),
+        },
+        index=dates,
+    )
+
+
+@pytest.fixture
+def single_row_ohlcv() -> pd.DataFrame:
+    """Single-row OHLCV DataFrame."""
+    dates = pd.bdate_range(start="2024-01-02", periods=1, freq="B")
+    return pd.DataFrame(
+        {
+            "Open": [100.0],
+            "High": [105.0],
+            "Low": [95.0],
+            "Close": [102.0],
+            "Volume": [50_000],
+        },
+        index=dates,
+    )
