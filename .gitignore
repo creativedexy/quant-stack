@@ -1,8 +1,40 @@
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 dist/
 build/
+.eggs/
+
+# Virtual environments
 .venv/
+venv/
+env/
+
+# Data (don't commit market data to git)
+data/raw/
+data/processed/
+data/synthetic/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config secrets (never commit API keys)
+config/secrets.yaml
+.env
+
+# Test artifacts
 .pytest_cache/
-*.egg
+.coverage
+htmlcov/
