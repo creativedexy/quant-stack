@@ -1,1 +1,1 @@
-"""Placeholder — to be implemented in a subsequent phase."""
+"""Backtesting engines and strategy definitions."""

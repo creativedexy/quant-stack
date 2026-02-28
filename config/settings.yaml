@@ -85,3 +85,14 @@ portfolio:
   risk:
     confidence_level: 0.95
     correlation_flag_threshold: 0.85
+
+backtest:
+  initial_capital: 100000
+  commission_pct: 0.001
+  slippage_pct: 0.0005
+  strategies:
+    mean_reversion:
+      rsi_lower: 30
+      rsi_upper: 70
+    momentum:
+      sma_window: 50
