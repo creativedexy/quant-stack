@@ -38,3 +38,6 @@ config/secrets.yaml
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Logs
+*.log
