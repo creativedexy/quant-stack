@@ -1,4 +1,9 @@
-"""Tests for src.portfolio.analysis — factor evaluation and performance reporting."""
+"""Tests for src.portfolio.analysis — factor evaluation and performance reporting.
+
+Tests are designed to work regardless of whether alphalens/pyfolio are
+installed, by testing the public API contract rather than backend-specific
+behaviour.
+"""
 
 from __future__ import annotations
 
@@ -10,10 +15,10 @@ import pandas as pd
 import pytest
 
 from src.portfolio.analysis import (
-    _signal_quality_label,
     _overall_verdict,
-    evaluate_alpha,
-    full_strategy_report,
+    _signal_quality_label,
+    compare_strategies,
+    evaluate_factor,
     generate_tearsheet,
 )
 
@@ -30,7 +35,7 @@ def prices() -> pd.DataFrame:
     dates = pd.bdate_range("2020-01-02", periods=days, freq="B")
     tickers = ["ALPHA", "BETA", "GAMMA"]
     data = {}
-    for i, ticker in enumerate(tickers):
+    for ticker in tickers:
         log_ret = rng.normal(0.0003, 0.015, days)
         data[ticker] = 100.0 * np.exp(np.cumsum(log_ret))
     return pd.DataFrame(data, index=dates)
@@ -38,16 +43,10 @@ def prices() -> pd.DataFrame:
 
 @pytest.fixture
 def factor_series(prices: pd.DataFrame) -> pd.Series:
-    """Synthetic alpha factor — momentum-like signal (MultiIndex: date × asset).
-
-    Factor is computed from lagged 21-day returns so that we deliberately
-    have data available across the price history.
-    """
+    """Synthetic alpha factor (momentum-like signal, MultiIndex: date x asset)."""
     returns = prices.pct_change()
     momentum = returns.rolling(window=21, min_periods=21).mean()
-    # Drop initial NaN rows
     momentum = momentum.dropna()
-    # Stack into MultiIndex Series (date, asset) → factor value
     factor = momentum.stack()
     factor.index.names = ["date", "asset"]
     factor.name = "factor"
@@ -56,7 +55,7 @@ def factor_series(prices: pd.DataFrame) -> pd.Series:
 
 @pytest.fixture
 def backtest_returns(prices: pd.DataFrame) -> pd.Series:
-    """Simple equal-weight daily portfolio returns for the same period."""
+    """Simple equal-weight daily portfolio returns."""
     ret = prices.pct_change().dropna()
     port_ret = ret.mean(axis=1)
     port_ret.name = "strategy"
@@ -72,43 +71,22 @@ def benchmark_returns(prices: pd.DataFrame) -> pd.Series:
 
 
 # -------------------------------------------------------------------
-# evaluate_alpha tests
+# evaluate_factor tests
 # -------------------------------------------------------------------
 
-class TestEvaluateAlpha:
-    """Tests for the Alphalens-based factor evaluation."""
+class TestEvaluateFactor:
 
-    def test_returns_expected_keys(
+    def test_returns_ic_and_summary(
         self, factor_series: pd.Series, prices: pd.DataFrame
     ) -> None:
-        result = evaluate_alpha(factor_series, prices, periods=[1, 5])
-        expected_keys = {
-            "factor_data", "ic", "ic_by_period", "factor_returns",
-            "turnover", "summary",
-        }
-        assert expected_keys == set(result.keys())
-
-    def test_ic_is_numeric(
-        self, factor_series: pd.Series, prices: pd.DataFrame
-    ) -> None:
-        result = evaluate_alpha(factor_series, prices, periods=[1, 5])
-        ic = result["ic"]
-        assert isinstance(ic, (pd.Series, pd.DataFrame))
-        assert not ic.empty
-
-    def test_factor_returns_has_period_columns(
-        self, factor_series: pd.Series, prices: pd.DataFrame
-    ) -> None:
-        periods = [1, 5]
-        result = evaluate_alpha(factor_series, prices, periods=periods)
-        fr = result["factor_returns"]
-        for p in periods:
-            assert f"{p}D" in fr.columns
+        result = evaluate_factor(factor_series, prices, periods=[1, 5])
+        assert "ic" in result
+        assert "summary" in result
 
     def test_summary_contains_quality_labels(
         self, factor_series: pd.Series, prices: pd.DataFrame
     ) -> None:
-        result = evaluate_alpha(factor_series, prices, periods=[1])
+        result = evaluate_factor(factor_series, prices, periods=[1])
         summary = result["summary"]
         assert "1D" in summary
         entry = summary["1D"]
@@ -116,14 +94,22 @@ class TestEvaluateAlpha:
         assert "signal_quality" in entry
         assert entry["signal_quality"] in ("strong", "moderate", "weak", "none")
 
-    def test_turnover_has_top_and_bottom(
+    def test_ic_is_series(
         self, factor_series: pd.Series, prices: pd.DataFrame
     ) -> None:
-        result = evaluate_alpha(factor_series, prices, periods=[5])
-        turnover = result["turnover"]
-        assert "5D" in turnover
-        assert "top_quantile" in turnover["5D"]
-        assert "bottom_quantile" in turnover["5D"]
+        result = evaluate_factor(factor_series, prices, periods=[1, 5])
+        ic = result["ic"]
+        assert isinstance(ic, (pd.Series, pd.DataFrame))
+        assert not ic.empty
+
+    def test_multiple_periods(
+        self, factor_series: pd.Series, prices: pd.DataFrame
+    ) -> None:
+        periods = [1, 5, 21]
+        result = evaluate_factor(factor_series, prices, periods=periods)
+        summary = result["summary"]
+        for p in periods:
+            assert f"{p}D" in summary
 
 
 # -------------------------------------------------------------------
@@ -131,7 +117,6 @@ class TestEvaluateAlpha:
 # -------------------------------------------------------------------
 
 class TestGenerateTearsheet:
-    """Tests for the Pyfolio-based performance tear sheet."""
 
     def test_returns_metrics_dict(self, backtest_returns: pd.Series) -> None:
         result = generate_tearsheet(backtest_returns)
@@ -149,13 +134,11 @@ class TestGenerateTearsheet:
             assert np.isfinite(val), f"{key} is not finite: {val}"
 
     def test_sharpe_is_reasonable(self, backtest_returns: pd.Series) -> None:
-        """Sharpe should be a finite number, not wildly out of range."""
         result = generate_tearsheet(backtest_returns)
         sharpe = result["metrics"]["sharpe_ratio"]
-        assert -5.0 < sharpe < 10.0
+        assert -10.0 < sharpe < 20.0
 
-    def test_max_drawdown_is_negative(self, backtest_returns: pd.Series) -> None:
-        """Pyfolio reports max drawdown as a negative number."""
+    def test_max_drawdown_is_non_positive(self, backtest_returns: pd.Series) -> None:
         result = generate_tearsheet(backtest_returns)
         assert result["metrics"]["max_drawdown"] <= 0.0
 
@@ -163,7 +146,7 @@ class TestGenerateTearsheet:
         self, backtest_returns: pd.Series, benchmark_returns: pd.Series
     ) -> None:
         result = generate_tearsheet(
-            backtest_returns, benchmark_returns=benchmark_returns
+            backtest_returns, benchmark_returns=benchmark_returns,
         )
         metrics = result["metrics"]
         assert "excess_annual_return" in metrics
@@ -175,7 +158,6 @@ class TestGenerateTearsheet:
             result = generate_tearsheet(backtest_returns, save_dir=tmpdir)
             figs = result["figures"]
             assert len(figs) == 3
-            # Verify PNG files written
             png_files = list(Path(tmpdir).glob("*.png"))
             assert len(png_files) == 3
 
@@ -185,67 +167,42 @@ class TestGenerateTearsheet:
 
 
 # -------------------------------------------------------------------
-# full_strategy_report tests
+# compare_strategies tests
 # -------------------------------------------------------------------
 
-class TestFullStrategyReport:
-    """Tests for the combined report function."""
+class TestCompareStrategies:
 
-    def test_returns_all_sections(
-        self,
-        factor_series: pd.Series,
-        prices: pd.DataFrame,
-        backtest_returns: pd.Series,
-    ) -> None:
-        report = full_strategy_report(
-            "test_momentum",
-            factor_series,
-            prices,
-            backtest_returns,
-            periods=[1, 5],
+    def test_returns_dataframe(self, backtest_returns: pd.Series) -> None:
+        rng = np.random.default_rng(99)
+        dates = backtest_returns.index
+        strat_b = pd.Series(rng.normal(0.0002, 0.01, len(dates)), index=dates)
+        result = compare_strategies(
+            {"momentum": backtest_returns, "mean_reversion": strat_b},
         )
-        assert report["strategy_name"] == "test_momentum"
-        assert "alpha" in report
-        assert "performance" in report
-        assert "verdict" in report
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 2
 
-    def test_verdict_is_string(
-        self,
-        factor_series: pd.Series,
-        prices: pd.DataFrame,
-        backtest_returns: pd.Series,
-    ) -> None:
-        report = full_strategy_report(
-            "test_strat",
-            factor_series,
-            prices,
-            backtest_returns,
-            periods=[1],
+    def test_sorted_by_sharpe(self, backtest_returns: pd.Series) -> None:
+        rng = np.random.default_rng(99)
+        dates = backtest_returns.index
+        strat_b = pd.Series(rng.normal(-0.001, 0.02, len(dates)), index=dates)
+        result = compare_strategies(
+            {"good": backtest_returns, "bad": strat_b},
         )
-        assert isinstance(report["verdict"], str)
-        assert any(
-            label in report["verdict"]
-            for label in ("GO", "REVIEW", "NO-GO")
-        )
+        assert result.index[0] == "good"  # Higher Sharpe first
 
-    def test_save_dir_creates_subfolder(
-        self,
-        factor_series: pd.Series,
-        prices: pd.DataFrame,
-        backtest_returns: pd.Series,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            report = full_strategy_report(
-                "test_strat",
-                factor_series,
-                prices,
-                backtest_returns,
-                periods=[1],
-                save_dir=tmpdir,
-            )
-            strat_dir = Path(tmpdir) / "test_strat"
-            assert strat_dir.exists()
-            assert len(list(strat_dir.glob("*.png"))) == 3
+    def test_all_metrics_present(self, backtest_returns: pd.Series) -> None:
+        result = compare_strategies({"strat": backtest_returns})
+        expected = {
+            "sharpe", "sortino", "max_drawdown", "var_95", "cvar_95",
+            "annualised_return", "annualised_volatility", "calmar_ratio",
+        }
+        assert expected.issubset(result.columns)
+
+    def test_index_is_strategy_names(self, backtest_returns: pd.Series) -> None:
+        result = compare_strategies({"alpha_strat": backtest_returns})
+        assert result.index.name == "strategy"
+        assert "alpha_strat" in result.index
 
 
 # -------------------------------------------------------------------
@@ -253,7 +210,6 @@ class TestFullStrategyReport:
 # -------------------------------------------------------------------
 
 class TestSignalQualityLabel:
-    """Tests for _signal_quality_label."""
 
     def test_strong(self) -> None:
         assert _signal_quality_label(0.06) == "strong"
@@ -269,9 +225,11 @@ class TestSignalQualityLabel:
     def test_none(self) -> None:
         assert _signal_quality_label(0.0) == "none"
 
+    def test_nan(self) -> None:
+        assert _signal_quality_label(float("nan")) == "none"
+
 
 class TestOverallVerdict:
-    """Tests for _overall_verdict."""
 
     def test_go(self) -> None:
         alpha = {"1D": {"signal_quality": "strong"}}

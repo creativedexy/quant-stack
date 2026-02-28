@@ -1,14 +1,21 @@
-"""Factor evaluation and performance reporting via Alphalens and Pyfolio.
+"""Factor evaluation and performance reporting.
 
-Wraps alphalens-reloaded and pyfolio-reloaded to provide:
-- Factor quality assessment (information coefficient, factor returns, turnover)
-- Strategy performance tear sheets (Sharpe, Sortino, drawdown, Calmar)
-- A combined report function that chains both into a single summary
+Wraps alphalens-reloaded and pyfolio-reloaded when available, falling back
+to lightweight pure-pandas implementations when they are not installed.
 
-Usage:
-    from src.portfolio.analysis import evaluate_alpha, generate_tearsheet
-    alpha_report = evaluate_alpha(factor_data, prices)
-    perf_report = generate_tearsheet(returns)
+Provides:
+- :func:`evaluate_factor` — factor quality assessment (IC, factor returns,
+  turnover) via alphalens, or a pandas fallback.
+- :func:`generate_tearsheet` — strategy performance metrics and optional
+  plots; pyfolio when available, otherwise hand-rolled metrics.
+- :func:`compare_strategies` — side-by-side comparison of multiple
+  strategy return series.
+
+Usage::
+
+    from src.portfolio.analysis import evaluate_factor, generate_tearsheet
+    report = evaluate_factor(factor_data, prices)
+    tearsheet = generate_tearsheet(returns)
 """
 
 from __future__ import annotations
@@ -23,6 +30,12 @@ import pandas as pd
 matplotlib.use("Agg")  # Non-interactive backend for headless environments
 import matplotlib.pyplot as plt
 
+from src.portfolio.risk import (
+    max_drawdown,
+    risk_summary,
+    sharpe_ratio,
+    sortino_ratio,
+)
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -47,24 +60,27 @@ except ImportError:  # pragma: no cover
 
 
 # ===================================================================
-# 1.  Factor evaluation (Alphalens)
+# 1.  Factor evaluation
 # ===================================================================
 
-def evaluate_alpha(
+def evaluate_factor(
     factor: pd.Series,
     prices: pd.DataFrame,
     periods: tuple[int, ...] | list[int] = (1, 5, 21),
     quantiles: int = 5,
     max_loss: float = 0.5,
 ) -> dict[str, Any]:
-    """Evaluate an alpha factor using alphalens-reloaded.
+    """Evaluate an alpha factor.
+
+    Uses alphalens-reloaded if installed; otherwise falls back to a
+    lightweight pandas-based IC calculation.
 
     Args:
         factor: A Series with a MultiIndex of (date, asset) mapping to a
             scalar factor value.  Dates must be a subset of the *prices*
             index; assets must be a subset of *prices* columns.
         prices: Pricing DataFrame (DatetimeIndex, tickers as columns).
-            Used by alphalens to compute forward returns.
+            Used to compute forward returns.
         periods: Forward-return horizons in trading days.
         quantiles: Number of quantile buckets for the factor.
         max_loss: Maximum fraction of factor observations allowed to be
@@ -72,30 +88,41 @@ def evaluate_alpha(
 
     Returns:
         Dictionary containing:
+        - ``ic``: Mean information coefficient per period.
+        - ``summary``: Human-readable quality metrics dict per period.
+
+        When alphalens is available, also includes:
         - ``factor_data``: Cleaned factor + forward-returns DataFrame.
-        - ``ic``: Information coefficient per period (Series of IC means).
         - ``ic_by_period``: Full IC time series per period.
         - ``factor_returns``: Long-short factor return per period.
         - ``turnover``: Top/bottom quantile turnover per period.
-        - ``summary``: Human-readable quality metrics dict with a
-          go/no-go signal for each period.
-
-    Raises:
-        ImportError: If alphalens-reloaded is not installed.
     """
-    if not _HAS_ALPHALENS:  # pragma: no cover
-        raise ImportError(
-            "alphalens-reloaded is required for factor evaluation. "
-            "Install with: pip install 'quant-stack[portfolio]'"
+    periods = tuple(int(p) for p in periods)
+
+    if _HAS_ALPHALENS:
+        return _evaluate_factor_alphalens(
+            factor, prices, periods, quantiles, max_loss,
         )
 
+    logger.warning(
+        "alphalens-reloaded not installed — using pandas fallback for "
+        "factor evaluation. Install with: pip install 'quant-stack[portfolio]'"
+    )
+    return _evaluate_factor_fallback(factor, prices, periods)
+
+
+def _evaluate_factor_alphalens(
+    factor: pd.Series,
+    prices: pd.DataFrame,
+    periods: tuple[int, ...],
+    quantiles: int,
+    max_loss: float,
+) -> dict[str, Any]:
+    """Full alphalens-based factor evaluation."""
     logger.info(
-        "Evaluating alpha factor",
+        "Evaluating alpha factor (alphalens)",
         extra={"periods": list(periods), "quantiles": quantiles},
     )
-
-    # Alphalens expects periods as a tuple of ints
-    periods = tuple(int(p) for p in periods)
 
     factor_data = al_utils.get_clean_factor_and_forward_returns(
         factor,
@@ -105,24 +132,20 @@ def evaluate_alpha(
         max_loss=max_loss,
     )
 
-    # Information coefficient (Spearman rank correlation)
     ic_by_period = al_perf.factor_information_coefficient(factor_data)
     ic_means = al_perf.mean_information_coefficient(factor_data)
-
-    # Factor returns (mean return per quantile spread, long-short)
     factor_returns = al_perf.factor_returns(factor_data)
 
-    # Turnover: quantile membership turnover for top and bottom buckets
     turnover: dict[str, pd.Series] = {}
     for period in periods:
         col = f"{period}D"
         top_q = al_perf.quantile_turnover(factor_data, quantiles, period)
         bottom_q = al_perf.quantile_turnover(factor_data, 1, period)
-        turnover[col] = pd.Series(
-            {"top_quantile": float(top_q.mean()), "bottom_quantile": float(bottom_q.mean())},
-        )
+        turnover[col] = pd.Series({
+            "top_quantile": float(top_q.mean()),
+            "bottom_quantile": float(bottom_q.mean()),
+        })
 
-    # Build summary with go/no-go assessment
     summary: dict[str, dict[str, Any]] = {}
     for period in periods:
         col = f"{period}D"
@@ -147,8 +170,58 @@ def evaluate_alpha(
     }
 
 
+def _evaluate_factor_fallback(
+    factor: pd.Series,
+    prices: pd.DataFrame,
+    periods: tuple[int, ...],
+) -> dict[str, Any]:
+    """Lightweight fallback when alphalens is unavailable."""
+    logger.info(
+        "Evaluating alpha factor (pandas fallback)",
+        extra={"periods": list(periods)},
+    )
+
+    summary: dict[str, dict[str, Any]] = {}
+    ic_values: dict[str, float] = {}
+
+    for period in periods:
+        col = f"{period}D"
+        fwd = prices.pct_change(period).shift(-period)
+        # Unstack factor and align with forward returns
+        if isinstance(factor.index, pd.MultiIndex):
+            factor_unstacked = factor.unstack()
+        else:
+            factor_unstacked = factor.to_frame()
+
+        # Compute rank IC (Spearman) per date
+        common_dates = factor_unstacked.index.intersection(fwd.index)
+        ics = []
+        for dt in common_dates:
+            f_row = factor_unstacked.loc[dt].dropna()
+            r_row = fwd.loc[dt].dropna()
+            common_assets = f_row.index.intersection(r_row.index)
+            if len(common_assets) >= 3:
+                ic = f_row[common_assets].corr(r_row[common_assets], method="spearman")
+                if np.isfinite(ic):
+                    ics.append(ic)
+
+        mean_ic = float(np.mean(ics)) if ics else float("nan")
+        ic_values[col] = mean_ic
+        summary[col] = {
+            "mean_ic": round(mean_ic, 4),
+            "signal_quality": _signal_quality_label(mean_ic),
+        }
+
+    logger.info("Alpha evaluation complete (fallback)", extra={"summary": summary})
+
+    return {
+        "ic": pd.Series(ic_values),
+        "summary": summary,
+    }
+
+
 # ===================================================================
-# 2.  Performance tear sheet (Pyfolio)
+# 2.  Performance tear sheet
 # ===================================================================
 
 def generate_tearsheet(
@@ -157,7 +230,10 @@ def generate_tearsheet(
     risk_free_rate: float = 0.045,
     save_dir: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Generate a performance tear sheet using pyfolio-reloaded.
+    """Generate a performance tear sheet.
+
+    Uses pyfolio-reloaded if installed; otherwise falls back to
+    hand-rolled metrics from :mod:`src.portfolio.risk`.
 
     Args:
         returns: Daily strategy returns with DatetimeIndex.
@@ -171,17 +247,32 @@ def generate_tearsheet(
         - ``metrics``: Dict of scalar performance metrics.
         - ``figures``: List of matplotlib Figure objects (empty when
           *save_dir* is ``None``).
-
-    Raises:
-        ImportError: If pyfolio-reloaded is not installed.
     """
-    if not _HAS_PYFOLIO:  # pragma: no cover
-        raise ImportError(
-            "pyfolio-reloaded is required for tear-sheet generation. "
-            "Install with: pip install 'quant-stack[portfolio]'"
+    if _HAS_PYFOLIO:
+        metrics = _tearsheet_pyfolio(returns, benchmark_returns, risk_free_rate)
+    else:
+        logger.warning(
+            "pyfolio-reloaded not installed — using pandas fallback for "
+            "tear sheet. Install with: pip install 'quant-stack[portfolio]'"
         )
+        metrics = _tearsheet_fallback(returns, benchmark_returns, risk_free_rate)
 
-    logger.info("Generating performance tear sheet")
+    figures: list[plt.Figure] = []
+    if save_dir is not None:
+        figures = _save_tearsheet_figures(returns, benchmark_returns, save_dir)
+
+    logger.info("Tear sheet complete", extra={"metrics": metrics})
+
+    return {"metrics": metrics, "figures": figures}
+
+
+def _tearsheet_pyfolio(
+    returns: pd.Series,
+    benchmark_returns: pd.Series | None,
+    risk_free_rate: float,
+) -> dict[str, float]:
+    """Compute metrics via pyfolio."""
+    logger.info("Generating performance tear sheet (pyfolio)")
 
     daily_rf = (1 + risk_free_rate) ** (1 / 252) - 1
 
@@ -206,78 +297,74 @@ def generate_tearsheet(
         else:
             metrics["information_ratio"] = float("nan")
 
-    figures: list[plt.Figure] = []
-    if save_dir is not None:
-        figures = _save_tearsheet_figures(returns, benchmark_returns, save_dir)
-
-    logger.info("Tear sheet complete", extra={"metrics": metrics})
-
-    return {"metrics": metrics, "figures": figures}
+    return metrics
 
 
-# ===================================================================
-# 3.  Combined strategy report
-# ===================================================================
+def _tearsheet_fallback(
+    returns: pd.Series,
+    benchmark_returns: pd.Series | None,
+    risk_free_rate: float,
+) -> dict[str, float]:
+    """Compute metrics using the internal risk module."""
+    logger.info("Generating performance tear sheet (fallback)")
 
-def full_strategy_report(
-    strategy_name: str,
-    factor_data: pd.Series,
-    prices: pd.DataFrame,
-    backtest_returns: pd.Series,
-    benchmark_returns: pd.Series | None = None,
-    periods: tuple[int, ...] | list[int] = (1, 5, 21),
-    risk_free_rate: float = 0.045,
-    save_dir: str | Path | None = None,
-) -> dict[str, Any]:
-    """Chain factor evaluation and performance tear sheet into one report.
+    summary = risk_summary(returns, risk_free_rate=risk_free_rate)
+    mdd_result = max_drawdown(returns)
 
-    Args:
-        strategy_name: Human-readable strategy label.
-        factor_data: Alpha factor Series (MultiIndex: date × asset).
-        prices: Pricing DataFrame for alphalens forward returns.
-        backtest_returns: Daily backtest return series.
-        benchmark_returns: Optional benchmark returns.
-        periods: Forward-return horizons for factor evaluation.
-        risk_free_rate: Annualised risk-free rate.
-        save_dir: If provided, save figures to *save_dir/strategy_name/*.
-
-    Returns:
-        Dictionary with keys ``strategy_name``, ``alpha``, ``performance``,
-        and ``verdict`` (overall go/no-go string).
-    """
-    logger.info("Running full strategy report for '%s'", strategy_name)
-
-    # Factor evaluation
-    alpha_result = evaluate_alpha(factor_data, prices, periods=periods)
-
-    # Performance tear sheet
-    figure_dir = None
-    if save_dir is not None:
-        figure_dir = Path(save_dir) / strategy_name
-    perf_result = generate_tearsheet(
-        backtest_returns,
-        benchmark_returns=benchmark_returns,
-        risk_free_rate=risk_free_rate,
-        save_dir=figure_dir,
-    )
-
-    # Overall verdict
-    verdict = _overall_verdict(alpha_result["summary"], perf_result["metrics"])
-
-    report = {
-        "strategy_name": strategy_name,
-        "alpha": alpha_result,
-        "performance": perf_result,
-        "verdict": verdict,
+    metrics: dict[str, float] = {
+        "annual_return": summary["annualised_return"],
+        "annual_volatility": summary["annualised_volatility"],
+        "sharpe_ratio": summary["sharpe"],
+        "sortino_ratio": summary["sortino"],
+        "max_drawdown": mdd_result["max_drawdown"],
+        "calmar_ratio": summary["calmar_ratio"],
     }
 
-    logger.info(
-        "Strategy report for '%s': %s",
-        strategy_name,
-        verdict,
-    )
+    if benchmark_returns is not None:
+        aligned_ret, aligned_bench = returns.align(benchmark_returns, join="inner")
+        excess = aligned_ret - aligned_bench
+        excess_summary = risk_summary(excess, risk_free_rate=risk_free_rate)
+        metrics["excess_annual_return"] = excess_summary["annualised_return"]
+        metrics["tracking_error"] = excess_summary["annualised_volatility"]
+        if metrics["tracking_error"] != 0:
+            metrics["information_ratio"] = (
+                metrics["excess_annual_return"] / metrics["tracking_error"]
+            )
+        else:
+            metrics["information_ratio"] = float("nan")
 
-    return report
+    return metrics
+
+
+# ===================================================================
+# 3.  Compare strategies
+# ===================================================================
+
+def compare_strategies(
+    strategy_returns: dict[str, pd.Series],
+    risk_free_rate: float = 0.045,
+) -> pd.DataFrame:
+    """Compare multiple strategies side by side.
+
+    Args:
+        strategy_returns: Dictionary mapping strategy name to its daily
+            return Series.
+        risk_free_rate: Annualised risk-free rate.
+
+    Returns:
+        DataFrame with one row per strategy, columns for each metric,
+        sorted by Sharpe ratio descending.
+    """
+    rows: list[dict[str, Any]] = []
+    for name, rets in strategy_returns.items():
+        summary = risk_summary(rets, risk_free_rate=risk_free_rate)
+        row = {"strategy": name}
+        row.update(summary)
+        rows.append(row)
+
+    df = pd.DataFrame(rows).set_index("strategy")
+    df = df.sort_values("sharpe", ascending=False)
+    return df
 
 
 # ===================================================================
@@ -286,6 +373,8 @@ def full_strategy_report(
 
 def _signal_quality_label(mean_ic: float) -> str:
     """Map mean IC to a human-readable quality label."""
+    if np.isnan(mean_ic):
+        return "none"
     abs_ic = abs(mean_ic)
     if abs_ic >= 0.05:
         return "strong"
@@ -301,7 +390,6 @@ def _overall_verdict(
     perf_metrics: dict[str, float],
 ) -> str:
     """Produce a go/no-go verdict from alpha and performance results."""
-    # Check if any period has at least moderate signal quality
     has_signal = any(
         entry["signal_quality"] in ("strong", "moderate")
         for entry in alpha_summary.values()

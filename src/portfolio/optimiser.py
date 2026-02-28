@@ -1,13 +1,19 @@
 """Portfolio optimisation wrapper around riskfolio-lib.
 
-Provides a config-driven PortfolioOptimiser class that supports multiple
-optimisation methods (mean-variance, minimum CVaR, risk parity, equal weight)
-with position-size constraints.
+Provides a config-driven :class:`PortfolioOptimiser` class that supports
+multiple optimisation methods (mean-variance, minimum CVaR, risk parity,
+equal weight) with position-size constraints, plus standalone convenience
+functions.
 
-Usage:
-    from src.portfolio.optimiser import PortfolioOptimiser
+If ``riskfolio-lib`` is not installed, the optimiser gracefully falls back
+to equal-weight allocation for all methods and logs a warning.
+
+Usage::
+
+    from src.portfolio.optimiser import PortfolioOptimiser, equal_weight
     opt = PortfolioOptimiser(config=cfg)
     weights = opt.optimise(returns, method="mean_variance")
+    new_weights = opt.rebalance(current_weights, target_weights, max_turnover=0.10)
 """
 
 from __future__ import annotations
@@ -52,9 +58,15 @@ class PortfolioOptimiser:
         portfolio_cfg = config.get("portfolio", {})
 
         self.default_method: str = portfolio_cfg.get("default_method", "mean_variance")
-        self.max_weight: float = float(portfolio_cfg.get("constraints", {}).get("max_weight", 0.20))
-        self.min_weight: float = float(portfolio_cfg.get("constraints", {}).get("min_weight", 0.00))
-        self.risk_free_rate: float = float(portfolio_cfg.get("risk_free_rate", 0.045))
+        self.max_weight: float = float(
+            portfolio_cfg.get("constraints", {}).get("max_weight", 0.20)
+        )
+        self.min_weight: float = float(
+            portfolio_cfg.get("constraints", {}).get("min_weight", 0.00)
+        )
+        self.risk_free_rate: float = float(
+            portfolio_cfg.get("risk_free_rate", 0.045)
+        )
         self.covariance_method: str = portfolio_cfg.get("covariance_method", "ledoit")
 
     # ------------------------------------------------------------------
@@ -80,7 +92,7 @@ class PortfolioOptimiser:
                 estimates for mean-variance optimisation.
 
         Returns:
-            Pandas Series mapping ticker → weight, summing to 1.0.
+            Pandas Series mapping ticker -> weight, summing to 1.0.
 
         Raises:
             ValueError: If *method* is not recognised or *returns* is empty.
@@ -102,20 +114,68 @@ class PortfolioOptimiser:
         )
 
         if method == "equal_weight":
-            return self._equal_weight(returns)
+            return equal_weight(returns)
+
+        if not _HAS_RISKFOLIO:
+            logger.warning(
+                "riskfolio-lib not installed — falling back to equal_weight "
+                "for method '%s'. Install with: pip install 'quant-stack[portfolio]'",
+                method,
+            )
+            return equal_weight(returns)
 
         return self._riskfolio_optimise(returns, method, expected_returns)
+
+    def rebalance(
+        self,
+        current_weights: pd.Series,
+        target_weights: pd.Series,
+        max_turnover: float | None = None,
+    ) -> pd.Series:
+        """Compute rebalanced weights respecting a turnover constraint.
+
+        If the total absolute change from *current_weights* to
+        *target_weights* exceeds ``max_turnover``, the rebalanced weights
+        are scaled proportionally towards the target so that turnover
+        equals exactly ``max_turnover``.
+
+        Args:
+            current_weights: Current portfolio weights (ticker -> weight).
+            target_weights: Desired target weights (ticker -> weight).
+            max_turnover: Maximum total absolute weight change allowed.
+                If ``None`` or >= actual turnover, target weights are
+                returned unchanged.
+
+        Returns:
+            Rebalanced weight Series that respects the turnover constraint
+            and sums to 1.0.
+        """
+        # Align indices
+        all_tickers = current_weights.index.union(target_weights.index)
+        current = current_weights.reindex(all_tickers, fill_value=0.0)
+        target = target_weights.reindex(all_tickers, fill_value=0.0)
+
+        diff = target - current
+        actual_turnover = float(diff.abs().sum())
+
+        if max_turnover is None or actual_turnover <= max_turnover:
+            result = target.copy()
+        else:
+            # Scale the difference so total turnover == max_turnover
+            scale = max_turnover / actual_turnover
+            result = current + diff * scale
+
+        # Normalise to sum to 1.0
+        total = result.sum()
+        if total != 0:
+            result = result / total
+
+        result.name = "weights"
+        return result
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _equal_weight(returns: pd.DataFrame) -> pd.Series:
-        """Return equal weights for all tickers."""
-        n = returns.shape[1]
-        weights = pd.Series(1.0 / n, index=returns.columns, name="weights")
-        return weights
 
     def _riskfolio_optimise(
         self,
@@ -124,12 +184,6 @@ class PortfolioOptimiser:
         expected_returns: pd.Series | None,
     ) -> pd.Series:
         """Run riskfolio-lib optimisation with constraints."""
-        if not _HAS_RISKFOLIO:  # pragma: no cover
-            raise ImportError(
-                "riskfolio-lib is required for optimisation methods other than "
-                "equal_weight.  Install with: pip install 'quant-stack[portfolio]'"
-            )
-
         port = rp.Portfolio(returns=returns)
 
         # Estimate statistics
@@ -201,3 +255,50 @@ class PortfolioOptimiser:
         # Normalise to exactly 1.0 to avoid floating-point drift
         w = w / w.sum()
         return w
+
+
+# ------------------------------------------------------------------
+# Standalone convenience functions
+# ------------------------------------------------------------------
+
+def equal_weight(returns: pd.DataFrame) -> pd.Series:
+    """Return equal weights for all assets.
+
+    Args:
+        returns: Returns DataFrame whose columns define the asset universe.
+
+    Returns:
+        Series of equal weights summing to 1.0.
+    """
+    n = returns.shape[1]
+    weights = pd.Series(1.0 / n, index=returns.columns, name="weights")
+    return weights
+
+
+def inverse_volatility(returns: pd.DataFrame) -> pd.Series:
+    """Compute inverse-volatility weights.
+
+    Each asset is weighted inversely proportional to its historical
+    volatility (standard deviation of returns).  Weights are normalised
+    to sum to 1.0.
+
+    Args:
+        returns: Returns DataFrame (tickers as columns, DatetimeIndex).
+
+    Returns:
+        Series of inverse-volatility weights summing to 1.0.
+
+    Raises:
+        ValueError: If any asset has zero volatility.
+    """
+    vol = returns.std(ddof=1)
+    if (vol == 0).any():
+        zero_assets = list(vol[vol == 0].index)
+        raise ValueError(
+            f"Cannot compute inverse-volatility weights — zero volatility "
+            f"for: {zero_assets}"
+        )
+    inv_vol = 1.0 / vol
+    weights = inv_vol / inv_vol.sum()
+    weights.name = "weights"
+    return weights
