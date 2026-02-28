@@ -63,6 +63,25 @@ def sample_config() -> dict:
                 "log_returns": True,
             },
         },
+        "portfolio": {
+            "default_method": "mean_variance",
+            "methods": [
+                "mean_variance",
+                "min_cvar",
+                "risk_parity",
+                "equal_weight",
+            ],
+            "constraints": {
+                "max_weight": 0.20,
+                "min_weight": 0.00,
+            },
+            "risk_free_rate": 0.045,
+            "covariance_method": "ledoit",
+            "risk": {
+                "confidence_level": 0.95,
+                "correlation_flag_threshold": 0.85,
+            },
+        },
     }
 
 

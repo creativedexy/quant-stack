@@ -1,1 +1,1 @@
-"""Placeholder — to be implemented in a subsequent phase."""
+"""Portfolio optimisation and risk management."""
