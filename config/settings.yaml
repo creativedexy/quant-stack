@@ -65,3 +65,7 @@ models:
     n_splits: 5
     gap: 5
     min_train_size: 252
+  automl:
+    n_folds: 3
+    clf_models: ["lr", "rf", "gbc", "et", "lightgbm"]
+    reg_models: ["lr", "rf", "gbr", "et", "lightgbm"]
