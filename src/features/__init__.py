@@ -1,4 +1,4 @@
-"""Feature engineering — technical indicators and alpha factors."""
+"""Feature engineering — technical indicators, alpha factors, and pipeline."""
 
 from src.features.technical import (
     add_sma,
@@ -9,6 +9,7 @@ from src.features.technical import (
     add_atr,
     add_all_indicators,
 )
+from src.features.pipeline import FeaturePipeline
 
 __all__ = [
     "add_sma",
@@ -18,4 +19,5 @@ __all__ = [
     "add_bollinger_bands",
     "add_atr",
     "add_all_indicators",
+    "FeaturePipeline",
 ]
