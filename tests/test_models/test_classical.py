@@ -57,7 +57,7 @@ class TestRandomForestModel:
         X_train, y_train = X.iloc[:400], y.iloc[:400]
         X_test, y_test = X.iloc[400:], y.iloc[400:]
 
-        model = RandomForestModel(n_estimators=10, max_depth=3)
+        model = RandomForestModel("rf", n_estimators=10, max_depth=3)
         model.fit(X_train, y_train)
 
         preds = model.predict(X_test)
@@ -67,50 +67,54 @@ class TestRandomForestModel:
 
         metrics = model.evaluate(X_test, y_test)
         assert "accuracy" in metrics
-        assert "precision" in metrics
+        assert "rmse" in metrics
+        assert "mae" in metrics
+        assert "hit_rate" in metrics
 
     def test_metadata_after_fit(self, feature_target_pair):
         X, y = feature_target_pair
-        model = RandomForestModel(n_estimators=10)
+        model = RandomForestModel("rf", n_estimators=10)
         model.fit(X, y)
 
-        assert model.metadata["model_class"] == "RandomForestModel"
-        assert model.metadata["train_start"] == str(X.index.min().date())
-        assert model.metadata["train_end"] == str(X.index.max().date())
+        assert model.metadata["name"] == "rf"
+        assert model.metadata["trained"] is True
+        assert model.metadata["train_date_range"] == (
+            str(X.index.min().date()),
+            str(X.index.max().date()),
+        )
         assert model.metadata["feature_names"] == list(X.columns)
         assert model.metadata["n_train_samples"] == len(X)
 
     def test_config_defaults_loaded(self):
         model = RandomForestModel()
-        params = model.metadata["hyperparams"]
-        # These come from config/settings.yaml models.random_forest
+        params = model.metadata["hyperparameters"]
+        # From config/settings.yaml models.random_forest
         assert params["n_estimators"] == 200
-        assert params["max_depth"] == 8
+        assert params["max_depth"] == 10
 
     def test_caller_overrides_config(self):
-        model = RandomForestModel(n_estimators=50, max_depth=2)
-        params = model.metadata["hyperparams"]
+        model = RandomForestModel("rf", n_estimators=50, max_depth=2)
+        params = model.metadata["hyperparameters"]
         assert params["n_estimators"] == 50
         assert params["max_depth"] == 2
 
     def test_predictions_are_binary(self, feature_target_pair):
         X, y = feature_target_pair
-        model = RandomForestModel(n_estimators=10, max_depth=3)
+        model = RandomForestModel("rf", n_estimators=10, max_depth=3)
         model.fit(X.iloc[:400], y.iloc[:400])
         preds = model.predict(X.iloc[400:])
         assert set(preds.unique()).issubset({0, 1})
 
     def test_save_load_round_trip(self, feature_target_pair, tmp_path):
         X, y = feature_target_pair
-        model = RandomForestModel(n_estimators=10)
+        model = RandomForestModel("rf_model", n_estimators=10)
         model.fit(X.iloc[:400], y.iloc[:400])
 
-        path = model.save(tmp_path / "rf_model")
+        path = model.save(tmp_path)
         from src.models.base import QuantModel
         loaded = QuantModel.load(path)
 
         assert isinstance(loaded, RandomForestModel)
-        # Loaded model should produce the same predictions.
         preds_original = model.predict(X.iloc[400:])
         preds_loaded = loaded.predict(X.iloc[400:])
         pd.testing.assert_series_equal(preds_original, preds_loaded)
@@ -127,7 +131,7 @@ class TestGradientBoostingModel:
         X_train, y_train = X.iloc[:400], y.iloc[:400]
         X_test, y_test = X.iloc[400:], y.iloc[400:]
 
-        model = GradientBoostingModel(n_estimators=20, max_depth=2)
+        model = GradientBoostingModel("gb", n_estimators=20, max_depth=2)
         model.fit(X_train, y_train)
 
         preds = model.predict(X_test)
@@ -139,21 +143,21 @@ class TestGradientBoostingModel:
 
     def test_metadata_after_fit(self, feature_target_pair):
         X, y = feature_target_pair
-        model = GradientBoostingModel(n_estimators=20)
+        model = GradientBoostingModel("gb", n_estimators=20)
         model.fit(X, y)
 
-        assert model.metadata["model_class"] == "GradientBoostingModel"
+        assert model.metadata["name"] == "gb"
         assert model.metadata["n_train_samples"] == len(X)
 
     def test_config_defaults_loaded(self):
         model = GradientBoostingModel()
-        params = model.metadata["hyperparams"]
-        assert params["n_estimators"] == 150
+        params = model.metadata["hyperparameters"]
+        assert params["n_estimators"] == 300
         assert params["learning_rate"] == 0.05
         assert params["subsample"] == 0.8
 
     def test_caller_overrides_config(self):
-        model = GradientBoostingModel(n_estimators=30, learning_rate=0.1)
-        params = model.metadata["hyperparams"]
+        model = GradientBoostingModel("gb", n_estimators=30, learning_rate=0.1)
+        params = model.metadata["hyperparameters"]
         assert params["n_estimators"] == 30
         assert params["learning_rate"] == 0.1

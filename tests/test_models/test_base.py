@@ -24,15 +24,17 @@ class _StubModel(QuantModel):
     """Minimal concrete subclass used only in tests."""
 
     def __init__(self, **kwargs) -> None:
-        super().__init__()
-        self.metadata["hyperparams"] = kwargs
-        self._trained = False
+        super().__init__(name="stub_model")
+        self.metadata["hyperparameters"] = kwargs
 
-    def fit(self, X_train: pd.DataFrame, y_train: pd.Series) -> None:
-        self._trained = True
-        self.metadata["train_start"] = str(X_train.index.min().date())
-        self.metadata["train_end"] = str(X_train.index.max().date())
+    def fit(self, X_train: pd.DataFrame, y_train: pd.Series) -> "_StubModel":
+        self.metadata["trained"] = True
+        self.metadata["train_date_range"] = (
+            str(X_train.index.min().date()),
+            str(X_train.index.max().date()),
+        )
         self.metadata["feature_names"] = list(X_train.columns)
+        return self
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
         # Predict the majority class (1) for all rows.
@@ -69,16 +71,19 @@ class TestQuantModelCannotInstantiate:
 class TestMetadata:
     def test_initial_metadata(self):
         model = _StubModel()
-        assert model.metadata["model_class"] == "_StubModel"
-        assert model.metadata["train_start"] is None
+        assert model.metadata["name"] == "stub_model"
+        assert model.metadata["trained"] is False
         assert model.metadata["feature_names"] == []
 
     def test_metadata_after_fit(self, xy_classification):
         X, y = xy_classification
         model = _StubModel()
         model.fit(X, y)
-        assert model.metadata["train_start"] == str(X.index.min().date())
-        assert model.metadata["train_end"] == str(X.index.max().date())
+        assert model.metadata["trained"] is True
+        assert model.metadata["train_date_range"] == (
+            str(X.index.min().date()),
+            str(X.index.max().date()),
+        )
         assert model.metadata["feature_names"] == ["feat_a", "feat_b"]
 
 
@@ -89,9 +94,10 @@ class TestEvaluate:
         model.fit(X, y)
         metrics = model.evaluate(X, y)
         assert "accuracy" in metrics
-        assert "precision" in metrics
+        assert "rmse" in metrics
+        assert "mae" in metrics
+        assert "hit_rate" in metrics
         assert 0.0 <= metrics["accuracy"] <= 1.0
-        assert 0.0 <= metrics["precision"] <= 1.0
 
     def test_information_coefficient_present(self, xy_classification):
         X, y = xy_classification
@@ -107,19 +113,20 @@ class TestSaveLoad:
         model = _StubModel(alpha=0.1)
         model.fit(X, y)
 
-        saved_path = model.save(tmp_path / "test_model")
+        saved_path = model.save(tmp_path)
         assert saved_path.exists()
-        assert (tmp_path / "test_model.meta.json").exists()
+        assert (tmp_path / "stub_model" / "metadata.json").exists()
 
         loaded = QuantModel.load(saved_path)
         assert isinstance(loaded, _StubModel)
-        assert loaded.metadata["train_start"] == model.metadata["train_start"]
-        assert loaded.metadata["hyperparams"] == {"alpha": 0.1}
+        assert loaded.metadata["train_date_range"] == model.metadata["train_date_range"]
+        assert loaded.metadata["hyperparameters"] == {"alpha": 0.1}
 
-    def test_load_without_extension(self, xy_classification, tmp_path):
+    def test_load_from_directory(self, xy_classification, tmp_path):
         X, y = xy_classification
         model = _StubModel()
         model.fit(X, y)
-        model.save(tmp_path / "model2")
-        loaded = QuantModel.load(tmp_path / "model2")
+        model.save(tmp_path)
+        # Load by pointing at the model directory
+        loaded = QuantModel.load(tmp_path / "stub_model")
         assert isinstance(loaded, _StubModel)

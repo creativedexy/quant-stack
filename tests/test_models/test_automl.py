@@ -36,8 +36,9 @@ def pipeline_features() -> pd.DataFrame:
     Module-scoped so the (relatively expensive) pipeline runs once.
     """
     ohlcv = generate_synthetic_ohlcv("AUTOML_TEST", days=800, seed=99)
-    pipe = FeaturePipeline(drop_na=True)
-    return pipe.run(ohlcv)
+    pipe = FeaturePipeline()
+    result = pipe.run(ohlcv)
+    return result.dropna()
 
 
 @pytest.fixture(scope="module")

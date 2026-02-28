@@ -206,16 +206,19 @@ class PyCaretModel(QuantModel):
         train_index: pd.DatetimeIndex | None = None,
         pycaret_module: Any = None,
     ) -> None:
-        super().__init__()
+        super().__init__(name="pycaret_model")
         self._estimator = estimator
         self._target_type = target_type
         self._pycaret_module = pycaret_module
 
         if train_index is not None and len(train_index) > 0:
-            self.metadata["train_start"] = str(train_index.min().date())
-            self.metadata["train_end"] = str(train_index.max().date())
+            self.metadata["train_date_range"] = (
+                str(train_index.min().date()),
+                str(train_index.max().date()),
+            )
+        self.metadata["trained"] = estimator is not None
         self.metadata["feature_names"] = feature_names or []
-        self.metadata["hyperparams"] = {
+        self.metadata["hyperparameters"] = {
             "target_type": target_type,
             "estimator_class": type(estimator).__name__ if estimator else None,
         }
@@ -231,7 +234,7 @@ class PyCaretModel(QuantModel):
         self.__dict__.update(state)
         self._pycaret_module = None
 
-    def fit(self, X_train: pd.DataFrame, y_train: pd.Series) -> None:
+    def fit(self, X_train: pd.DataFrame, y_train: pd.Series) -> "PyCaretModel":
         """Re-fit the underlying estimator.
 
         For most prototyping workflows, the model is already fitted by
@@ -242,10 +245,14 @@ class PyCaretModel(QuantModel):
             raise RuntimeError("No estimator set — use quick_compare() first")
 
         self._estimator.fit(X_train, y_train)
-        self.metadata["train_start"] = str(X_train.index.min().date())
-        self.metadata["train_end"] = str(X_train.index.max().date())
+        self.metadata["trained"] = True
+        self.metadata["train_date_range"] = (
+            str(X_train.index.min().date()),
+            str(X_train.index.max().date()),
+        )
         self.metadata["feature_names"] = list(X_train.columns)
         self.metadata["n_train_samples"] = len(X_train)
+        return self
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
         """Generate predictions using the PyCaret estimator.

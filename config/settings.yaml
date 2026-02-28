@@ -60,12 +60,12 @@ features:
 models:
   random_forest:
     n_estimators: 200
-    max_depth: 8
+    max_depth: 10
     min_samples_leaf: 20
     max_features: "sqrt"
   gradient_boosting:
-    n_estimators: 150
-    max_depth: 4
+    n_estimators: 300
+    max_depth: 6
     learning_rate: 0.05
     min_samples_leaf: 20
     subsample: 0.8

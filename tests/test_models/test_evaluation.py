@@ -1,12 +1,13 @@
 """Tests for time-series aware cross-validation (src.models.evaluation).
 
 Covers:
-- walk_forward_cv returns correct structure
-- Per-fold metrics include required keys
-- **No future data in any training fold** (explicit temporal verification)
-- Gap between train end and test start is respected
-- Folds cover the dataset without overlap
-- Edge cases: too little data, unsorted index
+- time_series_split produces correct number of folds
+- No overlap between any train and test indices
+- Gap is respected: verify_no_leakage passes for all folds
+- CRITICAL: For each fold, max(train_dates) + gap_days < min(test_dates)
+- walk_forward_cv returns correct structure with all expected keys
+- compare_models returns DataFrame with one row per model
+- Test with synthetic features from FeaturePipeline + synthetic OHLCV data
 """
 
 from __future__ import annotations
@@ -15,8 +16,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.classical import RandomForestModel
-from src.models.evaluation import walk_forward_cv
+from src.models.classical import RandomForestModel, GradientBoostingModel
+from src.models.evaluation import (
+    DataValidationError,
+    time_series_split,
+    verify_no_leakage,
+    walk_forward_cv,
+    compare_models,
+    plot_cv_results,
+)
 
 
 # ------------------------------------------------------------------
@@ -25,11 +33,7 @@ from src.models.evaluation import walk_forward_cv
 
 @pytest.fixture
 def cv_dataset() -> tuple[pd.DataFrame, pd.Series]:
-    """1000-row synthetic classification dataset for CV tests.
-
-    Binary target: 1 if cumulative feature sum > 0, else 0.
-    Large enough to support 5-fold walk-forward with min_train_size=252.
-    """
+    """1000-row synthetic classification dataset for CV tests."""
     rng = np.random.default_rng(42)
     dates = pd.bdate_range("2016-01-01", periods=1000, freq="B")
     X = pd.DataFrame(
@@ -50,7 +54,7 @@ def cv_dataset() -> tuple[pd.DataFrame, pd.Series]:
 
 @pytest.fixture
 def small_dataset() -> tuple[pd.DataFrame, pd.Series]:
-    """Tiny dataset that is too small for default CV parameters."""
+    """Tiny dataset too small for default CV parameters."""
     dates = pd.bdate_range("2020-01-01", periods=50, freq="B")
     rng = np.random.default_rng(7)
     X = pd.DataFrame({"f1": rng.standard_normal(50)}, index=dates)
@@ -58,200 +62,332 @@ def small_dataset() -> tuple[pd.DataFrame, pd.Series]:
     return X, y
 
 
+@pytest.fixture
+def test_config() -> dict:
+    """Minimal config for evaluation tests."""
+    return {
+        "general": {"random_seed": 42},
+        "models": {
+            "random_forest": {
+                "n_estimators": 10,
+                "max_depth": 3,
+            },
+            "gradient_boosting": {
+                "n_estimators": 20,
+                "max_depth": 2,
+                "learning_rate": 0.1,
+            },
+            "evaluation": {
+                "n_splits": 5,
+                "gap": 5,
+                "min_train_size": 252,
+            },
+        },
+    }
+
+
 # ------------------------------------------------------------------
-# Return structure
+# time_series_split
 # ------------------------------------------------------------------
 
-class TestReturnStructure:
-
-    def test_returns_dict_with_required_keys(self, cv_dataset):
-        X, y = cv_dataset
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(model, X, y, n_splits=3, gap=5, min_train_size=252)
-        assert "fold_metrics" in result
-        assert "mean_metrics" in result
-        assert "splits" in result
+class TestTimeSeriesSplit:
 
     def test_correct_number_of_folds(self, cv_dataset):
         X, y = cv_dataset
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(model, X, y, n_splits=4, gap=5, min_train_size=252)
-        assert len(result["fold_metrics"]) == 4
-        assert len(result["splits"]) == 4
+        folds = list(time_series_split(X, y, n_splits=4, gap=5, min_train_size=252))
+        assert len(folds) == 4
 
-    def test_fold_metrics_contain_expected_keys(self, cv_dataset):
+    def test_no_overlap_between_train_and_test(self, cv_dataset):
         X, y = cv_dataset
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(model, X, y, n_splits=3, gap=5, min_train_size=252)
-        for fm in result["fold_metrics"]:
-            assert "accuracy" in fm
-            assert "precision" in fm
-            assert "sharpe" in fm
-            assert "information_coefficient" in fm
+        for train_idx, test_idx in time_series_split(
+            X, y, n_splits=5, gap=5, min_train_size=252,
+        ):
+            overlap = set(train_idx) & set(test_idx)
+            assert len(overlap) == 0, f"Overlap found: {overlap}"
 
-    def test_mean_metrics_averaged(self, cv_dataset):
+    def test_gap_is_respected(self, cv_dataset):
         X, y = cv_dataset
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(model, X, y, n_splits=3, gap=5, min_train_size=252)
-        for key in result["mean_metrics"]:
-            values = [fm[key] for fm in result["fold_metrics"] if key in fm]
-            expected = np.mean(values)
-            assert result["mean_metrics"][key] == pytest.approx(expected)
-
-
-# ------------------------------------------------------------------
-# NO FUTURE DATA IN TRAINING — the critical anti-lookahead test
-# ------------------------------------------------------------------
-
-class TestNoFutureDataInTraining:
-    """Explicitly verify that no training fold contains dates that
-    overlap with or come after the corresponding test fold."""
-
-    def test_train_end_before_test_start_in_every_fold(self, cv_dataset):
-        """The train_end date must be strictly before test_start in
-        every fold, with at least ``gap`` trading days between them."""
-        X, y = cv_dataset
-        gap = 5
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(model, X, y, n_splits=5, gap=gap, min_train_size=252)
-
-        for fold_idx, (train_end, test_start, test_end) in enumerate(result["splits"]):
-            train_end_ts = pd.Timestamp(train_end)
-            test_start_ts = pd.Timestamp(test_start)
-
-            # Train end must be strictly before test start.
-            assert train_end_ts < test_start_ts, (
-                f"Fold {fold_idx}: train_end={train_end} >= test_start={test_start}"
+        gap = 10
+        for train_idx, test_idx in time_series_split(
+            X, y, n_splits=3, gap=gap, min_train_size=252,
+        ):
+            assert np.max(train_idx) + gap < np.min(test_idx), (
+                f"Gap violated: max(train)={np.max(train_idx)}, "
+                f"min(test)={np.min(test_idx)}, gap={gap}"
             )
 
-            # Count business days between train_end and test_start.
-            gap_days = len(pd.bdate_range(train_end_ts, test_start_ts, freq="B")) - 1
+    def test_critical_temporal_ordering(self, cv_dataset):
+        """CRITICAL: For each fold, max(train_dates) + gap_days < min(test_dates)."""
+        X, y = cv_dataset
+        gap = 5
+        for train_idx, test_idx in time_series_split(
+            X, y, n_splits=5, gap=gap, min_train_size=252,
+        ):
+            train_dates = X.index[train_idx]
+            test_dates = X.index[test_idx]
+
+            assert train_dates.max() < test_dates.min(), (
+                f"Train end {train_dates.max()} not before test start {test_dates.min()}"
+            )
+
+            # Count business days between train end and test start
+            gap_days = len(pd.bdate_range(train_dates.max(), test_dates.min(), freq="B")) - 1
             assert gap_days >= gap, (
-                f"Fold {fold_idx}: gap is only {gap_days} days, expected >= {gap}"
+                f"Gap is only {gap_days} days, expected >= {gap}"
             )
 
-    def test_no_train_date_appears_in_test(self, cv_dataset):
-        """Re-derive the actual index ranges and confirm zero overlap."""
+    def test_expanding_window(self, cv_dataset):
+        """Each successive fold must train on more data."""
         X, y = cv_dataset
-        gap = 5
-        n_splits = 4
-        min_train_size = 252
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(
-            model, X, y, n_splits=n_splits, gap=gap, min_train_size=min_train_size,
-        )
+        folds = list(time_series_split(X, y, n_splits=5, gap=5, min_train_size=252))
+        train_sizes = [len(t) for t, _ in folds]
+        for i in range(1, len(train_sizes)):
+            assert train_sizes[i] > train_sizes[i - 1]
 
-        for fold_idx, (train_end_str, test_start_str, test_end_str) in enumerate(
-            result["splits"]
-        ):
-            train_end = pd.Timestamp(train_end_str)
-            test_start = pd.Timestamp(test_start_str)
-            test_end = pd.Timestamp(test_end_str)
-
-            train_dates = X.index[X.index <= train_end]
-            test_dates = X.index[(X.index >= test_start) & (X.index <= test_end)]
-
-            overlap = train_dates.intersection(test_dates)
-            assert len(overlap) == 0, (
-                f"Fold {fold_idx}: {len(overlap)} dates appear in both "
-                f"train and test sets: {overlap[:5].tolist()}"
-            )
-
-    def test_gap_region_excluded_from_both_train_and_test(self, cv_dataset):
-        """Dates inside the gap must not appear in either train or test."""
+    def test_last_fold_includes_end(self, cv_dataset):
+        """Last fold's test set must extend to the end of data."""
         X, y = cv_dataset
-        gap = 10  # Use a larger gap to make this easier to verify.
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(model, X, y, n_splits=3, gap=gap, min_train_size=252)
-
-        for fold_idx, (train_end_str, test_start_str, _) in enumerate(
-            result["splits"]
-        ):
-            train_end = pd.Timestamp(train_end_str)
-            test_start = pd.Timestamp(test_start_str)
-
-            # Gap dates: business days strictly between train_end and test_start
-            gap_dates = X.index[(X.index > train_end) & (X.index < test_start)]
-            assert len(gap_dates) >= gap - 1, (
-                f"Fold {fold_idx}: expected >= {gap - 1} gap dates, got {len(gap_dates)}"
-            )
-
-    def test_expanding_window_each_fold_trains_on_more_data(self, cv_dataset):
-        """Each successive fold's training set must be strictly larger."""
-        X, y = cv_dataset
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(model, X, y, n_splits=5, gap=5, min_train_size=252)
-
-        train_ends = [pd.Timestamp(s[0]) for s in result["splits"]]
-        for i in range(1, len(train_ends)):
-            assert train_ends[i] > train_ends[i - 1], (
-                f"Fold {i} train_end ({train_ends[i]}) not after "
-                f"fold {i-1} train_end ({train_ends[i-1]})"
-            )
-
-
-# ------------------------------------------------------------------
-# Fold coverage
-# ------------------------------------------------------------------
-
-class TestFoldCoverage:
-
-    def test_folds_are_contiguous(self, cv_dataset):
-        """Test folds should not have gaps between them (only the
-        train→test gap matters, not test→next_test)."""
-        X, y = cv_dataset
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(model, X, y, n_splits=4, gap=5, min_train_size=252)
-
-        for i in range(1, len(result["splits"])):
-            prev_test_end = pd.Timestamp(result["splits"][i - 1][2])
-            curr_test_start = pd.Timestamp(result["splits"][i][1])
-            # Current fold's test start should be after previous fold's test end.
-            assert curr_test_start > prev_test_end
-
-    def test_last_fold_extends_to_end(self, cv_dataset):
-        """The last fold should consume remaining data up to the end."""
-        X, y = cv_dataset
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(model, X, y, n_splits=3, gap=5, min_train_size=252)
-
-        last_test_end = pd.Timestamp(result["splits"][-1][2])
-        assert last_test_end == X.index[-1]
-
-
-# ------------------------------------------------------------------
-# Edge cases
-# ------------------------------------------------------------------
-
-class TestEdgeCases:
+        folds = list(time_series_split(X, y, n_splits=3, gap=5, min_train_size=252))
+        _, last_test = folds[-1]
+        assert np.max(last_test) == len(X) - 1
 
     def test_too_little_data_raises(self, small_dataset):
         X, y = small_dataset
-        model = RandomForestModel(n_estimators=10, max_depth=2)
         with pytest.raises(ValueError, match="Not enough data"):
-            walk_forward_cv(model, X, y, n_splits=5, gap=5, min_train_size=252)
+            list(time_series_split(X, y, n_splits=5, gap=5, min_train_size=252))
 
-    def test_unsorted_index_raises(self, cv_dataset):
+
+# ------------------------------------------------------------------
+# verify_no_leakage
+# ------------------------------------------------------------------
+
+class TestVerifyNoLeakage:
+
+    def test_passes_valid_split(self):
+        train_idx = np.arange(100)
+        test_idx = np.arange(110, 200)
+        verify_no_leakage(train_idx, test_idx, gap=5)  # Should not raise
+
+    def test_fails_with_leakage(self):
+        train_idx = np.arange(100)
+        test_idx = np.arange(102, 200)
+        with pytest.raises(DataValidationError, match="Data leakage"):
+            verify_no_leakage(train_idx, test_idx, gap=5)
+
+    def test_fails_at_boundary(self):
+        train_idx = np.arange(100)
+        test_idx = np.arange(105, 200)  # gap=5: 99+5=104 >= 105? No, 104 < 105
+        # Actually max(train_idx) = 99, 99 + 5 = 104, 104 < 105. This passes.
+        verify_no_leakage(train_idx, test_idx, gap=5)
+
+    def test_fails_exact_boundary(self):
+        train_idx = np.arange(100)  # max = 99
+        test_idx = np.arange(104, 200)  # min = 104; 99 + 5 = 104 >= 104
+        with pytest.raises(DataValidationError, match="Data leakage"):
+            verify_no_leakage(train_idx, test_idx, gap=5)
+
+
+# ------------------------------------------------------------------
+# walk_forward_cv
+# ------------------------------------------------------------------
+
+class TestWalkForwardCV:
+
+    def test_returns_correct_structure(self, cv_dataset, test_config):
+        X, y = cv_dataset
+        model = RandomForestModel("rf", config=test_config)
+        result = walk_forward_cv(
+            model, X, y, n_splits=3, gap=5, min_train_size=252,
+        )
+        assert "per_fold" in result
+        assert "aggregate" in result
+        assert "model_name" in result
+        assert "n_splits" in result
+        assert "gap" in result
+        assert result["model_name"] == "rf"
+        assert result["n_splits"] == 3
+
+    def test_correct_number_of_folds(self, cv_dataset, test_config):
+        X, y = cv_dataset
+        model = RandomForestModel("rf", config=test_config)
+        result = walk_forward_cv(
+            model, X, y, n_splits=4, gap=5, min_train_size=252,
+        )
+        assert len(result["per_fold"]) == 4
+
+    def test_per_fold_has_expected_keys(self, cv_dataset, test_config):
+        X, y = cv_dataset
+        model = RandomForestModel("rf", config=test_config)
+        result = walk_forward_cv(
+            model, X, y, n_splits=3, gap=5, min_train_size=252,
+        )
+        for fold in result["per_fold"]:
+            assert "fold" in fold
+            assert "train_size" in fold
+            assert "test_size" in fold
+            assert "metrics" in fold
+            assert "accuracy" in fold["metrics"]
+            assert "information_coefficient" in fold["metrics"]
+            assert "hit_rate" in fold["metrics"]
+            assert "rmse" in fold["metrics"]
+            assert "mae" in fold["metrics"]
+
+    def test_aggregate_has_mean_and_std(self, cv_dataset, test_config):
+        X, y = cv_dataset
+        model = RandomForestModel("rf", config=test_config)
+        result = walk_forward_cv(
+            model, X, y, n_splits=3, gap=5, min_train_size=252,
+        )
+        agg = result["aggregate"]
+        assert "mean_information_coefficient" in agg
+        assert "std_information_coefficient" in agg
+        assert "mean_hit_rate" in agg
+        assert "mean_accuracy" in agg
+
+    def test_train_end_before_test_start(self, cv_dataset, test_config):
+        """CRITICAL: train end must be before test start in every fold."""
+        X, y = cv_dataset
+        model = RandomForestModel("rf", config=test_config)
+        result = walk_forward_cv(
+            model, X, y, n_splits=5, gap=5, min_train_size=252,
+        )
+        for fold in result["per_fold"]:
+            train_end = pd.Timestamp(fold["train_end"])
+            test_start = pd.Timestamp(fold["test_start"])
+            assert train_end < test_start, (
+                f"Fold {fold['fold']}: train_end={train_end} >= test_start={test_start}"
+            )
+
+    def test_gap_respected_in_cv(self, cv_dataset, test_config):
+        X, y = cv_dataset
+        gap = 10
+        model = RandomForestModel("rf", config=test_config)
+        result = walk_forward_cv(
+            model, X, y, n_splits=3, gap=gap, min_train_size=252,
+        )
+        for fold in result["per_fold"]:
+            train_end = pd.Timestamp(fold["train_end"])
+            test_start = pd.Timestamp(fold["test_start"])
+            gap_days = len(pd.bdate_range(train_end, test_start, freq="B")) - 1
+            assert gap_days >= gap
+
+    def test_unsorted_index_raises(self, cv_dataset, test_config):
         X, y = cv_dataset
         X_shuffled = X.sample(frac=1.0, random_state=0)
         y_shuffled = y.loc[X_shuffled.index]
-        model = RandomForestModel(n_estimators=10, max_depth=2)
+        model = RandomForestModel("rf", config=test_config)
         with pytest.raises(ValueError, match="sorted chronologically"):
             walk_forward_cv(model, X_shuffled, y_shuffled)
 
-    def test_gap_zero_allowed(self, cv_dataset):
-        """A gap of 0 should work — train end immediately precedes test start."""
+    def test_gap_zero_allowed(self, cv_dataset, test_config):
         X, y = cv_dataset
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(model, X, y, n_splits=3, gap=0, min_train_size=252)
-        assert len(result["fold_metrics"]) == 3
-        # Even with gap=0, train end should still be before test start.
-        for train_end, test_start, _ in result["splits"]:
-            assert pd.Timestamp(train_end) < pd.Timestamp(test_start)
+        model = RandomForestModel("rf", config=test_config)
+        result = walk_forward_cv(
+            model, X, y, n_splits=3, gap=0, min_train_size=252,
+        )
+        assert len(result["per_fold"]) == 3
 
-    def test_single_fold(self, cv_dataset):
-        """n_splits=1 should train once and test once."""
+    def test_single_fold(self, cv_dataset, test_config):
         X, y = cv_dataset
-        model = RandomForestModel(n_estimators=10, max_depth=2)
-        result = walk_forward_cv(model, X, y, n_splits=1, gap=5, min_train_size=252)
-        assert len(result["fold_metrics"]) == 1
+        model = RandomForestModel("rf", config=test_config)
+        result = walk_forward_cv(
+            model, X, y, n_splits=1, gap=5, min_train_size=252,
+        )
+        assert len(result["per_fold"]) == 1
+
+
+# ------------------------------------------------------------------
+# compare_models
+# ------------------------------------------------------------------
+
+class TestCompareModels:
+
+    def test_returns_dataframe(self, cv_dataset, test_config):
+        X, y = cv_dataset
+        models = [
+            RandomForestModel("rf", config=test_config),
+            GradientBoostingModel("gb", config=test_config),
+        ]
+        result = compare_models(models, X, y, n_splits=3, gap=5, min_train_size=252)
+        assert isinstance(result, pd.DataFrame)
+
+    def test_one_row_per_model(self, cv_dataset, test_config):
+        X, y = cv_dataset
+        models = [
+            RandomForestModel("rf", config=test_config),
+            GradientBoostingModel("gb", config=test_config),
+        ]
+        result = compare_models(models, X, y, n_splits=3, gap=5, min_train_size=252)
+        assert len(result) == 2
+        assert set(result.index) == {"rf", "gb"}
+
+    def test_has_aggregate_metrics(self, cv_dataset, test_config):
+        X, y = cv_dataset
+        models = [RandomForestModel("rf", config=test_config)]
+        result = compare_models(models, X, y, n_splits=3, gap=5, min_train_size=252)
+        assert "mean_information_coefficient" in result.columns
+        assert "mean_hit_rate" in result.columns
+
+
+# ------------------------------------------------------------------
+# plot_cv_results
+# ------------------------------------------------------------------
+
+class TestPlotCVResults:
+
+    def test_returns_figure(self, cv_dataset, test_config):
+        import matplotlib.pyplot as plt
+        X, y = cv_dataset
+        model = RandomForestModel("rf", config=test_config)
+        result = walk_forward_cv(
+            model, X, y, n_splits=3, gap=5, min_train_size=252,
+        )
+        fig = plot_cv_results(result)
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_saves_to_file(self, cv_dataset, test_config, tmp_path):
+        X, y = cv_dataset
+        model = RandomForestModel("rf", config=test_config)
+        result = walk_forward_cv(
+            model, X, y, n_splits=3, gap=5, min_train_size=252,
+        )
+        save_path = tmp_path / "cv_results.png"
+        plot_cv_results(result, save_path=save_path)
+        assert save_path.exists()
+
+
+# ------------------------------------------------------------------
+# Integration: synthetic pipeline features
+# ------------------------------------------------------------------
+
+class TestWithSyntheticPipelineFeatures:
+    """Test walk_forward_cv using features from the FeaturePipeline."""
+
+    def test_cv_with_pipeline_features(self, sample_ohlcv, sample_config):
+        from src.features.pipeline import FeaturePipeline
+        from src.models.targets import create_direction_target, align_features_and_target
+
+        pipeline = FeaturePipeline(config=sample_config)
+        features = pipeline.generate(sample_ohlcv)
+
+        target = create_direction_target(sample_ohlcv["Close"], horizon=5)
+        X, y = align_features_and_target(features, target)
+
+        assert len(X) > 300
+
+        model_config = {
+            "general": {"random_seed": 42},
+            "models": {
+                "random_forest": {"n_estimators": 10, "max_depth": 3},
+            },
+        }
+        model = RandomForestModel("rf", config=model_config)
+        result = walk_forward_cv(
+            model, X, y.astype(int),
+            n_splits=3, gap=5, min_train_size=252,
+        )
+
+        assert len(result["per_fold"]) == 3
+        for fold in result["per_fold"]:
+            assert "accuracy" in fold["metrics"]

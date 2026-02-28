@@ -104,6 +104,23 @@ def sample_config() -> dict:
                 },
             },
         },
+        "models": {
+            "random_forest": {
+                "n_estimators": 10,
+                "max_depth": 3,
+                "min_samples_leaf": 5,
+            },
+            "gradient_boosting": {
+                "n_estimators": 20,
+                "max_depth": 2,
+                "learning_rate": 0.1,
+            },
+            "evaluation": {
+                "n_splits": 5,
+                "gap": 5,
+                "min_train_size": 252,
+            },
+        },
         "execution": {
             "mode": "paper",
             "broker": {
