@@ -1,1 +1,1 @@
-"""Placeholder — to be implemented in a subsequent phase."""
+"""Order execution and broker connectivity."""

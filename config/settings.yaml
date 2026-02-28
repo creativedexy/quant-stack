@@ -96,3 +96,18 @@ backtest:
       rsi_upper: 70
     momentum:
       sma_window: 50
+
+execution:
+  mode: paper  # paper or live — NEVER default to live
+  broker:
+    host: "127.0.0.1"
+    port: 7497
+    client_id: 1
+    timeout: 10
+    max_retries: 3
+    retry_delay: 2
+  risk:
+    max_trade_pct: 0.10  # max 10% of portfolio per single trade
+    max_daily_trades: 20
+  account:
+    base_currency: GBP

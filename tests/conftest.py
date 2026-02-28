@@ -96,6 +96,21 @@ def sample_config() -> dict:
                 },
             },
         },
+        "execution": {
+            "mode": "paper",
+            "broker": {
+                "host": "127.0.0.1",
+                "port": 7497,
+                "client_id": 1,
+                "timeout": 10,
+                "max_retries": 3,
+                "retry_delay": 2,
+            },
+            "risk": {
+                "max_trade_pct": 0.10,
+                "max_daily_trades": 20,
+            },
+        },
     }
 
 
