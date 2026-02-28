@@ -3,8 +3,8 @@
 
 Usage:
     python -m scripts.run_backtest --strategy mean_reversion
-    python -m scripts.run_backtest --strategy momentum --start 2018-01-01
-    python -m scripts.run_backtest --strategy mean_reversion --strategy momentum
+    python -m scripts.run_backtest --strategy momentum --start 2018-01-01 --end 2023-12-31
+    python -m scripts.run_backtest --compare
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.backtest.engine import run_backtest, compare_strategies
-from src.backtest.strategy import get_strategy, STRATEGY_REGISTRY
+from src.backtest.engine import BacktestEngine
+from src.backtest.strategy import strategy_registry
 from src.data.synthetic import generate_synthetic_ohlcv
 from src.features.pipeline import FeaturePipeline
 from src.utils.config import load_config
@@ -27,20 +27,32 @@ logger = get_logger(__name__)
 
 
 def main() -> None:
+    available = strategy_registry.list_strategies()
+
     parser = argparse.ArgumentParser(description="Run a backtest")
     parser.add_argument(
         "--strategy",
         type=str,
-        nargs="+",
-        required=True,
-        choices=sorted(STRATEGY_REGISTRY),
-        help="Strategy name(s) to backtest",
+        default=None,
+        choices=available,
+        help="Strategy name to backtest",
+    )
+    parser.add_argument(
+        "--compare",
+        action="store_true",
+        help="Run all registered strategies and print comparison",
     )
     parser.add_argument(
         "--start",
         type=str,
         default=None,
         help="Start date YYYY-MM-DD (default: from config)",
+    )
+    parser.add_argument(
+        "--end",
+        type=str,
+        default=None,
+        help="End date YYYY-MM-DD (default: all available data)",
     )
     parser.add_argument(
         "--ticker",
@@ -50,8 +62,11 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    config = load_config()
 
+    if not args.compare and args.strategy is None:
+        parser.error("Either --strategy or --compare is required")
+
+    config = load_config()
     start = args.start or config["data"]["start_date"]
     ticker = args.ticker or config["universe"]["tickers"][0]
 
@@ -64,20 +79,45 @@ def main() -> None:
         seed=config["general"].get("random_seed", 42),
     )
 
-    # Build features
-    logger.info("Building features…")
+    # Optionally truncate to end date
+    if args.end:
+        ohlcv = ohlcv.loc[:args.end]
+
+    # Build features (compat mode — OHLCV + indicators)
+    logger.info("Building features...")
     pipeline = FeaturePipeline()
     features = pipeline.run(ohlcv)
 
-    # Run backtest(s)
-    strategies = [get_strategy(name, config) for name in args.strategy]
+    # Backtest engine
+    engine = BacktestEngine(config)
 
-    if len(strategies) == 1:
-        result = run_backtest(strategies[0], features, config)
-        _print_result(result)
-    else:
-        comparison = compare_strategies(strategies, features, config)
+    # Ensure reports directory exists
+    reports_dir = Path("reports")
+    reports_dir.mkdir(exist_ok=True)
+
+    if args.compare:
+        # Run all registered strategies
+        strategies = [strategy_registry.create(name) for name in available]
+        comparison = engine.compare(strategies, features, features)
         _print_comparison(comparison)
+
+        # Save individual plots
+        for name in available:
+            strat = strategy_registry.create(name)
+            result = engine.run(strat, features, features)
+            save_path = reports_dir / f"backtest_{name}.png"
+            engine.plot_results(result, save_path=save_path)
+            logger.info("Saved plot for %s to %s", name, save_path)
+
+    else:
+        strat = strategy_registry.create(args.strategy)
+        result = engine.run(strat, features, features)
+        _print_result(result)
+
+        # Save equity curve plot
+        save_path = reports_dir / f"backtest_{args.strategy}.png"
+        engine.plot_results(result, save_path=save_path)
+        logger.info("Saved plot to %s", save_path)
 
 
 def _print_result(result) -> None:
@@ -98,7 +138,6 @@ def _print_comparison(comparison) -> None:
     print(f"\n{'=' * 80}")
     print("  Strategy Comparison")
     print(f"{'=' * 80}")
-    # Format for readability
     fmt = comparison.copy()
     for col in fmt.columns:
         if fmt[col].dtype == float:

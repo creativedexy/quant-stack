@@ -1,226 +1,318 @@
-"""Strategy base class and example implementations.
+"""Trading strategy base class and built-in implementations.
 
-Every strategy takes a feature DataFrame (OHLCV + indicators) and produces a
-signal Series with values in {-1, 0, 1} (short, flat, long) or continuous
-weights.
+Defines an abstract :class:`Strategy` interface and three concrete strategies:
 
-Usage:
-    from src.backtest.strategy import MomentumStrategy
-    strat = MomentumStrategy()
+* :class:`MeanReversionStrategy` — RSI-based mean reversion.
+* :class:`MomentumStrategy` — Price vs SMA trend following.
+* :class:`MACDCrossoverStrategy` — MACD histogram crossover signals.
+
+A :class:`StrategyRegistry` catalogues all available strategies and provides
+factory-style instantiation.
+
+Usage::
+
+    from src.backtest.strategy import strategy_registry
+    strat = strategy_registry.create("mean_reversion")
     signals = strat.generate_signals(features_df)
 """
 
 from __future__ import annotations
 
-import abc
+from abc import ABC, abstractmethod
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
-from src.utils.config import load_config
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-# ===================================================================
+# ------------------------------------------------------------------
 # Abstract base
-# ===================================================================
+# ------------------------------------------------------------------
 
-class Strategy(abc.ABC):
-    """Abstract base class for all trading strategies."""
-
-    @abc.abstractmethod
-    def generate_signals(self, features: pd.DataFrame) -> pd.Series:
-        """Produce a signal Series from a feature DataFrame.
-
-        Args:
-            features: DataFrame containing OHLCV columns and any technical
-                indicators / model scores.  Must have a DatetimeIndex.
-
-        Returns:
-            Series with the same DatetimeIndex and values representing
-            the desired position: -1 (short), 0 (flat), or 1 (long).
-            Continuous weights are also acceptable.
-        """
-
-    @property
-    @abc.abstractmethod
-    def name(self) -> str:
-        """Human-readable strategy name."""
-
-    @classmethod
-    def from_config(cls, config: dict[str, Any] | None = None) -> "Strategy":
-        """Construct a strategy instance from a config dict.
-
-        Subclasses may override this to pull strategy-specific parameters
-        from the config.  The default implementation simply calls the
-        no-arg constructor.
-
-        Args:
-            config: Full project configuration dict.  If ``None`` the
-                default settings.yaml is loaded.
-
-        Returns:
-            Configured Strategy instance.
-        """
-        return cls()
-
-
-# ===================================================================
-# Mean-reversion strategy
-# ===================================================================
-
-class MeanReversionStrategy(Strategy):
-    """Buy when RSI is oversold, sell when overbought.
+class Strategy(ABC):
+    """Base class for trading strategies.
 
     Args:
-        rsi_column: Name of the RSI column in the features DataFrame.
-        rsi_lower: RSI threshold below which a buy signal is generated.
-        rsi_upper: RSI threshold above which a sell signal is generated.
+        name: Human-readable strategy name.
+        config: Optional configuration overrides.
+    """
+
+    def __init__(self, name: str, config: dict[str, Any] | None = None) -> None:
+        self.name = name
+        self.config = config or {}
+
+    @abstractmethod
+    def generate_signals(self, features: pd.DataFrame) -> pd.DataFrame:
+        """Produce trading signals from features.
+
+        Returns a DataFrame with the same DatetimeIndex as *features*.
+        Each column corresponds to a ticker (or a single ``signal`` column
+        for single-asset strategies).  Values: 1 = long, -1 = short,
+        0 = flat.
+
+        If all feature values are NaN the strategy must return all zeros.
+
+        Args:
+            features: Feature DataFrame (DatetimeIndex, indicator columns).
+
+        Returns:
+            Signal DataFrame with integer values in {-1, 0, 1}.
+        """
+
+    def describe(self) -> str:
+        """Human-readable description of the strategy logic."""
+        return f"Strategy: {self.name}"
+
+
+# ------------------------------------------------------------------
+# 1. Mean Reversion (RSI-based)
+# ------------------------------------------------------------------
+
+class MeanReversionStrategy(Strategy):
+    """Buy when RSI < oversold threshold, sell when RSI > overbought threshold.
+
+    Requires ``rsi_14`` (or whatever RSI column exists) in features.
+
+    Config overrides:
+        oversold_threshold: RSI level below which to go long (default 30).
+        overbought_threshold: RSI level above which to go short (default 70).
     """
 
     def __init__(
         self,
-        rsi_column: str = "rsi_14",
-        rsi_lower: int = 30,
-        rsi_upper: int = 70,
+        name: str = "mean_reversion",
+        config: dict[str, Any] | None = None,
     ) -> None:
-        self.rsi_column = rsi_column
-        self.rsi_lower = rsi_lower
-        self.rsi_upper = rsi_upper
+        super().__init__(name, config)
+        self._oversold = self.config.get("oversold_threshold", 30)
+        self._overbought = self.config.get("overbought_threshold", 70)
 
-    @property
-    def name(self) -> str:
-        return "mean_reversion"
-
-    @classmethod
-    def from_config(cls, config: dict[str, Any] | None = None) -> "MeanReversionStrategy":
-        if config is None:
-            config = load_config()
-        bt_cfg = config.get("backtest", {}).get("strategies", {}).get("mean_reversion", {})
-        return cls(
-            rsi_lower=bt_cfg.get("rsi_lower", 30),
-            rsi_upper=bt_cfg.get("rsi_upper", 70),
-        )
-
-    def generate_signals(self, features: pd.DataFrame) -> pd.Series:
-        """Generate mean-reversion signals based on RSI thresholds.
-
-        Args:
-            features: DataFrame containing an RSI column.
-
-        Returns:
-            Signal Series: 1 when RSI < lower, -1 when RSI > upper, 0 otherwise.
-        """
-        if self.rsi_column not in features.columns:
-            raise KeyError(
-                f"RSI column '{self.rsi_column}' not found in features. "
-                f"Available columns: {list(features.columns)}"
+    def generate_signals(self, features: pd.DataFrame) -> pd.DataFrame:
+        # Find the RSI column (e.g. rsi_14)
+        rsi_cols = [c for c in features.columns if c.startswith("rsi_")]
+        if not rsi_cols:
+            logger.warning("No RSI column found — returning flat signals")
+            return pd.DataFrame(
+                np.zeros((len(features), 1), dtype=int),
+                index=features.index,
+                columns=["signal"],
             )
 
-        rsi = features[self.rsi_column]
-        signals = pd.Series(0, index=features.index, name="signal", dtype=int)
-        signals[rsi < self.rsi_lower] = 1
-        signals[rsi > self.rsi_upper] = -1
+        rsi_col = rsi_cols[0]
+        rsi = features[rsi_col]
+
+        signal = pd.Series(
+            np.zeros(len(features), dtype=int),
+            index=features.index,
+            name="signal",
+        )
+        signal[rsi < self._oversold] = 1
+        signal[rsi > self._overbought] = -1
+        # NaN RSI → flat
+        signal[rsi.isna()] = 0
 
         logger.info(
             "MeanReversion signals: %d long, %d short, %d flat",
-            (signals == 1).sum(),
-            (signals == -1).sum(),
-            (signals == 0).sum(),
+            (signal == 1).sum(),
+            (signal == -1).sum(),
+            (signal == 0).sum(),
         )
-        return signals
+        return signal.to_frame()
+
+    def describe(self) -> str:
+        return (
+            f"Mean Reversion: buy when RSI < {self._oversold}, "
+            f"sell when RSI > {self._overbought}"
+        )
 
 
-# ===================================================================
-# Momentum strategy
-# ===================================================================
+# ------------------------------------------------------------------
+# 2. Momentum (Close > SMA)
+# ------------------------------------------------------------------
 
 class MomentumStrategy(Strategy):
-    """Buy when price is above SMA, sell when below.
+    """Buy when Close > SMA_50, sell when Close < SMA_50.
 
-    Args:
-        sma_column: Name of the SMA column in the features DataFrame.
-        price_column: Column to compare against the SMA.
+    Requires ``sma_50`` in features and ``Close`` in the data.
+
+    Config overrides:
+        sma_window: SMA window to use (default 50).
     """
 
     def __init__(
         self,
-        sma_column: str = "sma_50",
-        price_column: str = "Close",
+        name: str = "momentum",
+        config: dict[str, Any] | None = None,
     ) -> None:
-        self.sma_column = sma_column
-        self.price_column = price_column
+        super().__init__(name, config)
+        self._sma_window = self.config.get("sma_window", 50)
 
-    @property
-    def name(self) -> str:
-        return "momentum"
+    def generate_signals(self, features: pd.DataFrame) -> pd.DataFrame:
+        sma_col = f"sma_{self._sma_window}"
 
-    @classmethod
-    def from_config(cls, config: dict[str, Any] | None = None) -> "MomentumStrategy":
-        if config is None:
-            config = load_config()
-        bt_cfg = config.get("backtest", {}).get("strategies", {}).get("momentum", {})
-        sma_window = bt_cfg.get("sma_window", 50)
-        return cls(sma_column=f"sma_{sma_window}")
-
-    def generate_signals(self, features: pd.DataFrame) -> pd.Series:
-        """Generate momentum signals based on price vs SMA.
-
-        Args:
-            features: DataFrame containing a price column and an SMA column.
-
-        Returns:
-            Signal Series: 1 when price > SMA, -1 when price < SMA.
-        """
-        if self.sma_column not in features.columns:
-            raise KeyError(
-                f"SMA column '{self.sma_column}' not found in features. "
-                f"Available columns: {list(features.columns)}"
+        if sma_col not in features.columns:
+            logger.warning("Column %s not found — returning flat signals", sma_col)
+            return pd.DataFrame(
+                np.zeros((len(features), 1), dtype=int),
+                index=features.index,
+                columns=["signal"],
             )
 
-        price = features[self.price_column]
-        sma = features[self.sma_column]
-        signals = pd.Series(0, index=features.index, name="signal", dtype=int)
-        signals[price > sma] = 1
-        signals[price < sma] = -1
+        if "Close" not in features.columns:
+            logger.warning("Close column not found — returning flat signals")
+            return pd.DataFrame(
+                np.zeros((len(features), 1), dtype=int),
+                index=features.index,
+                columns=["signal"],
+            )
+
+        close = features["Close"]
+        sma = features[sma_col]
+
+        signal = pd.Series(
+            np.zeros(len(features), dtype=int),
+            index=features.index,
+            name="signal",
+        )
+        signal[close > sma] = 1
+        signal[close < sma] = -1
+        # NaN → flat
+        signal[close.isna() | sma.isna()] = 0
 
         logger.info(
             "Momentum signals: %d long, %d short, %d flat",
-            (signals == 1).sum(),
-            (signals == -1).sum(),
-            (signals == 0).sum(),
+            (signal == 1).sum(),
+            (signal == -1).sum(),
+            (signal == 0).sum(),
         )
-        return signals
+        return signal.to_frame()
+
+    def describe(self) -> str:
+        return f"Momentum: buy when Close > SMA_{self._sma_window}"
 
 
-# ===================================================================
-# Registry
-# ===================================================================
+# ------------------------------------------------------------------
+# 3. MACD Crossover
+# ------------------------------------------------------------------
 
-STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
-    "mean_reversion": MeanReversionStrategy,
-    "momentum": MomentumStrategy,
-}
+class MACDCrossoverStrategy(Strategy):
+    """Buy on MACD histogram crossing from negative to positive; sell on
+    the reverse crossover.  Hold (0) otherwise.
 
-
-def get_strategy(name: str, config: dict[str, Any] | None = None) -> Strategy:
-    """Look up a strategy by name and instantiate from config.
-
-    Args:
-        name: Strategy name (must match a key in ``STRATEGY_REGISTRY``).
-        config: Optional full config dict.
-
-    Returns:
-        Configured Strategy instance.
-
-    Raises:
-        ValueError: If the strategy name is not recognised.
+    Requires ``macd_histogram`` in features.
     """
-    if name not in STRATEGY_REGISTRY:
-        raise ValueError(
-            f"Unknown strategy '{name}'. "
-            f"Available: {sorted(STRATEGY_REGISTRY)}"
+
+    def __init__(
+        self,
+        name: str = "macd_crossover",
+        config: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(name, config)
+
+    def generate_signals(self, features: pd.DataFrame) -> pd.DataFrame:
+        hist_col = "macd_histogram"
+        if hist_col not in features.columns:
+            logger.warning("Column %s not found — returning flat signals", hist_col)
+            return pd.DataFrame(
+                np.zeros((len(features), 1), dtype=int),
+                index=features.index,
+                columns=["signal"],
+            )
+
+        hist = features[hist_col]
+        prev_hist = hist.shift(1)
+
+        signal = pd.Series(
+            np.zeros(len(features), dtype=int),
+            index=features.index,
+            name="signal",
         )
-    return STRATEGY_REGISTRY[name].from_config(config)
+
+        # Bullish crossover: previous bar negative (or zero), current bar positive
+        bullish = (prev_hist <= 0) & (hist > 0)
+        # Bearish crossover: previous bar positive (or zero), current bar negative
+        bearish = (prev_hist >= 0) & (hist < 0)
+
+        signal[bullish] = 1
+        signal[bearish] = -1
+        # Everything else stays 0 (hold / flat)
+
+        # NaN → flat
+        signal[hist.isna() | prev_hist.isna()] = 0
+
+        logger.info(
+            "MACDCrossover signals: %d long, %d short, %d flat",
+            (signal == 1).sum(),
+            (signal == -1).sum(),
+            (signal == 0).sum(),
+        )
+        return signal.to_frame()
+
+    def describe(self) -> str:
+        return "MACD Crossover: buy/sell on histogram zero-line crossover"
+
+
+# ------------------------------------------------------------------
+# Strategy Registry
+# ------------------------------------------------------------------
+
+class StrategyRegistry:
+    """Central catalogue of available strategy types.
+
+    Usage::
+
+        registry = StrategyRegistry()
+        registry.register("mean_reversion", MeanReversionStrategy)
+        strat = registry.create("mean_reversion", config=cfg)
+    """
+
+    def __init__(self) -> None:
+        self._registry: dict[str, type[Strategy]] = {}
+
+    def register(self, name: str, strategy_class: type[Strategy]) -> None:
+        """Add a strategy class to the registry.
+
+        Args:
+            name: Short lookup name (e.g. ``"mean_reversion"``).
+            strategy_class: Must be a :class:`Strategy` subclass.
+        """
+        if not (isinstance(strategy_class, type) and issubclass(strategy_class, Strategy)):
+            raise TypeError(f"{strategy_class} is not a Strategy subclass")
+        self._registry[name] = strategy_class
+
+    def create(self, name: str, config: dict[str, Any] | None = None) -> Strategy:
+        """Instantiate a registered strategy.
+
+        Args:
+            name: Registered strategy name.
+            config: Optional configuration passed to the strategy constructor.
+
+        Returns:
+            A fresh Strategy instance.
+
+        Raises:
+            KeyError: If *name* is not registered.
+        """
+        if name not in self._registry:
+            raise KeyError(
+                f"Unknown strategy '{name}'. Available: {self.list_strategies()}"
+            )
+        return self._registry[name](name=name, config=config)
+
+    def list_strategies(self) -> list[str]:
+        """Return sorted list of registered strategy names."""
+        return sorted(self._registry.keys())
+
+
+# ------------------------------------------------------------------
+# Module-level registry — populated at import time
+# ------------------------------------------------------------------
+
+strategy_registry = StrategyRegistry()
+strategy_registry.register("mean_reversion", MeanReversionStrategy)
+strategy_registry.register("momentum", MomentumStrategy)
+strategy_registry.register("macd_crossover", MACDCrossoverStrategy)
