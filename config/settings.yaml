@@ -43,10 +43,18 @@ indicators:
 
 features:
   technical:
-    sma_windows: [5, 20, 50]
+    sma_windows: [5, 10, 20, 50, 200]
+    ema_windows: [12, 26]
     rsi_window: 14
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    bb_window: 20
+    bb_num_std: 2.0
+    atr_window: 14
+    volatility_windows: [21, 63]
   returns:
-    windows: [1, 5, 21]
+    windows: [1, 5, 10, 21, 63, 252]
     log_returns: true
 
 models:

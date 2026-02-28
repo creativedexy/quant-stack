@@ -56,7 +56,15 @@ def sample_config() -> dict:
         "features": {
             "technical": {
                 "sma_windows": [5, 20, 50],
+                "ema_windows": [12, 26],
                 "rsi_window": 14,
+                "macd_fast": 12,
+                "macd_slow": 26,
+                "macd_signal": 9,
+                "bb_window": 20,
+                "bb_num_std": 2.0,
+                "atr_window": 14,
+                "volatility_windows": [21, 63],
             },
             "returns": {
                 "windows": [1, 5, 21],

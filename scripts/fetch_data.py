@@ -6,6 +6,7 @@ Usage:
     python -m scripts.fetch_data --source synthetic
     python -m scripts.fetch_data --source yfinance --start 2020-01-01
     python -m scripts.fetch_data --tickers AAPL MSFT GOOGL
+    python -m scripts.fetch_data --source synthetic --features
 """
 
 from __future__ import annotations
@@ -63,6 +64,11 @@ def main() -> None:
         choices=["parquet", "csv"],
         help="Output format (default: from config)",
     )
+    parser.add_argument(
+        "--features",
+        action="store_true",
+        help="Run feature pipeline after fetch/clean and save feature matrices",
+    )
 
     args = parser.parse_args()
 
@@ -99,6 +105,78 @@ def main() -> None:
         clean_data = cleaner.clean_multiple(raw_data)
         clean_paths = fetcher.save(clean_data, data_dir / "processed", fmt=output_format)
         logger.info(f"Saved {len(clean_paths)} cleaned files to {data_dir / 'processed'}")
+    else:
+        clean_data = raw_data
+
+    # Feature engineering
+    if args.features:
+        from src.features.pipeline import FeaturePipeline
+        from src.features.visualisation import (
+            plot_price_with_bollinger,
+            plot_rsi,
+            plot_macd,
+            plot_feature_correlations,
+        )
+
+        pipeline = FeaturePipeline(config=config)
+        feature_dir = data_dir / "processed" / "features"
+
+        # Use cleaned data if available, otherwise raw
+        input_data = clean_data if not args.no_clean else raw_data
+
+        features = pipeline.generate(input_data)
+        feature_path = pipeline.generate_and_save(input_data, feature_dir / "features.parquet")
+        logger.info(
+            "Feature pipeline: %d features, %d rows → %s",
+            len(pipeline.get_feature_names()), len(features), feature_path,
+        )
+
+        # Generate visualisation charts for each ticker
+        charts_dir = data_dir / "processed" / "charts"
+        charts_dir.mkdir(parents=True, exist_ok=True)
+
+        for ticker, df in input_data.items():
+            ticker_features = pipeline.generate({ticker: df})
+            # Drop the ticker column for plotting
+            if "ticker" in ticker_features.columns:
+                ticker_features = ticker_features.drop(columns=["ticker"])
+
+            safe_name = ticker.replace(".", "_").replace("^", "")
+
+            try:
+                plot_price_with_bollinger(
+                    df, ticker_features, ticker=ticker,
+                    save_path=charts_dir / f"{safe_name}_bollinger.png",
+                )
+            except Exception as exc:
+                logger.warning("Could not plot Bollinger for %s: %s", ticker, exc)
+
+            try:
+                plot_rsi(
+                    df, ticker_features, ticker=ticker,
+                    save_path=charts_dir / f"{safe_name}_rsi.png",
+                )
+            except Exception as exc:
+                logger.warning("Could not plot RSI for %s: %s", ticker, exc)
+
+            try:
+                plot_macd(
+                    df, ticker_features, ticker=ticker,
+                    save_path=charts_dir / f"{safe_name}_macd.png",
+                )
+            except Exception as exc:
+                logger.warning("Could not plot MACD for %s: %s", ticker, exc)
+
+        # One correlation heatmap for all features
+        try:
+            plot_feature_correlations(
+                features.select_dtypes(include="number"),
+                save_path=charts_dir / "feature_correlations.png",
+            )
+        except Exception as exc:
+            logger.warning("Could not plot correlations: %s", exc)
+
+        logger.info("Charts saved to %s", charts_dir)
 
     logger.info("Done!")
 
