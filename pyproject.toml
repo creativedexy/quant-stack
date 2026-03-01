@@ -65,6 +65,14 @@ research = [
     "ipywidgets>=8.0",
 ]
 
+# API server
+api = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "websockets>=12.0",
+    "httpx>=0.27",
+]
+
 # Development tools
 dev = [
     "pytest>=7.4",
@@ -76,7 +84,7 @@ dev = [
 
 # Install everything
 all = [
-    "quant-stack[ml-extended,portfolio,backtest,data-live,execution,research,dev]",
+    "quant-stack[ml-extended,portfolio,backtest,data-live,execution,research,api,dev]",
 ]
 
 [tool.setuptools.packages.find]
