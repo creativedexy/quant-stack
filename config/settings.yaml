@@ -1,0 +1,66 @@
+# Quant Stack — Configuration
+# Copy this file and fill in your API keys / broker credentials as needed.
+# NEVER commit secrets to version control — use config/secrets.yaml for keys.
+
+general:
+  base_currency: GBP
+  log_level: INFO
+  timezone: Europe/London
+
+universe:
+  # Default equity universe for backtesting
+  equities:
+    - AAPL
+    - MSFT
+    - GOOGL
+    - AMZN
+    - TSLA
+  benchmark: "^GSPC"  # S&P 500
+
+data:
+  # Where raw and processed data are stored
+  raw_dir: data/raw
+  processed_dir: data/processed
+  synthetic_dir: data/synthetic
+  # Default date range for historical data
+  start_date: "2015-01-01"
+  end_date: "2025-12-31"
+  # Data source: "yfinance" or "openbb"
+  source: yfinance
+
+features:
+  # Technical indicator defaults
+  technical:
+    rsi_period: 14
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    bollinger_period: 20
+    bollinger_std: 2.0
+
+models:
+  # Walk-forward validation settings
+  train_window: 252    # ~1 year of trading days
+  test_window: 63      # ~3 months of trading days
+  step_size: 21        # ~1 month between retrains
+
+portfolio:
+  # Optimisation constraints
+  max_weight: 0.25          # Maximum 25% in a single position
+  min_weight: 0.0           # Allow zero allocation
+  risk_free_rate: 0.045     # Current approximate UK risk-free rate
+  target_volatility: 0.15   # 15% annualised volatility target
+
+backtest:
+  # Transaction cost assumptions
+  commission_bps: 10        # 10 basis points per trade
+  slippage_bps: 5           # 5 basis points slippage estimate
+  initial_capital: 100000   # GBP
+
+execution:
+  # Broker settings — defaults to paper trading for safety
+  mode: paper               # "paper" or "live" (live requires --live flag)
+  broker: ibkr
+  host: "127.0.0.1"
+  port: 7497                # 7497 = TWS paper, 7496 = TWS live
+  client_id: 1
