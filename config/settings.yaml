@@ -6,116 +6,106 @@ general:
   random_seed: 42
 
 universe:
-  name: default
-  tickers: ["SHEL.L", "BP.L", "HSBA.L", "AZN.L", "ULVR.L"]
-  benchmark: "^FTSE"
+  name: uk_large_cap
+  tickers:
+    - SHEL.L    # Shell
+    - AZN.L     # AstraZeneca
+    - HSBA.L    # HSBC
+    - ULVR.L    # Unilever
+    - BP.L      # BP
+    - GSK.L     # GSK
+    - RIO.L     # Rio Tinto
+    - DGE.L     # Diageo
+    - REL.L     # RELX
+    - LSEG.L    # London Stock Exchange Group
+  benchmark: ^FTSE
 
 data:
-  source: synthetic
+  source: synthetic         # 'synthetic' for testing, 'yfinance' for live
   start_date: "2020-01-01"
-  end_date: null
+  end_date: null             # null = today
   interval: 1d
-  fields: ["Open", "High", "Low", "Close", "Volume"]
+  fields:
+    - Open
+    - High
+    - Low
+    - Close
+    - Volume
   adjust_prices: true
   output_format: parquet
 
-indicators:
-  sma:
-    windows: [5, 10, 20, 50, 200]
-
-  ema:
-    windows: [12, 26]
-
-  rsi:
-    window: 14
-
-  macd:
-    fast: 12
-    slow: 26
-    signal: 9
-
-  bollinger_bands:
-    window: 20
-    num_std: 2.0
-
-  atr:
-    window: 14
-
 features:
   technical:
-    sma_windows: [5, 10, 20, 50, 200]
+    sma_windows: [5, 20, 50, 200]
     ema_windows: [12, 26]
     rsi_window: 14
-    macd_fast: 12
-    macd_slow: 26
-    macd_signal: 9
-    bb_window: 20
-    bb_num_std: 2.0
-    atr_window: 14
-    volatility_windows: [21, 63]
+    macd:
+      fast: 12
+      slow: 26
+      signal: 9
+    bollinger:
+      window: 20
+      num_std: 2
   returns:
-    windows: [1, 5, 10, 21, 63, 252]
+    windows: [1, 5, 21]
     log_returns: true
 
 models:
-  random_forest:
-    n_estimators: 200
-    max_depth: 10
-    min_samples_leaf: 20
-    max_features: "sqrt"
-  gradient_boosting:
-    n_estimators: 300
-    max_depth: 6
-    learning_rate: 0.05
-    min_samples_leaf: 20
-    subsample: 0.8
-  evaluation:
-    n_splits: 5
-    gap: 5
-    min_train_size: 252
-  automl:
-    n_folds: 3
-    clf_models: ["lr", "rf", "gbc", "et", "lightgbm"]
-    reg_models: ["lr", "rf", "gbr", "et", "lightgbm"]
+  type: random_forest
+  walk_forward:
+    train_months: 24
+    test_months: 3
+    step_months: 1
+  retrain_frequency: weekly    # 'weekly', 'monthly', or 'on_demand'
+  performance_threshold:
+    min_ic: 0.02               # Minimum information coefficient before alert
 
 portfolio:
-  default_method: mean_variance
-  methods:
-    - mean_variance
-    - min_cvar
-    - risk_parity
-    - equal_weight
+  optimisation:
+    method: mean_variance       # 'mean_variance', 'risk_parity', 'equal_weight'
+    risk_free_rate: 0.0425      # Current UK base rate
   constraints:
-    max_weight: 0.20
-    min_weight: 0.00
-  risk_free_rate: 0.045
-  covariance_method: ledoit
-  risk:
-    confidence_level: 0.95
-    correlation_flag_threshold: 0.85
+    max_weight: 0.20            # Maximum 20% in any single asset
+    min_weight: 0.02            # Minimum 2% if held
+    max_sector_weight: 0.40
+  rebalance:
+    frequency: monthly          # 'daily', 'weekly', 'monthly', 'quarterly'
+    threshold: 0.05             # Rebalance if drift exceeds 5%
+
+risk:
+  max_drawdown: 0.15            # Alert if portfolio drawdown exceeds 15%
+  max_correlation: 0.85         # Alert if pairwise correlation exceeds this
+  var_confidence: 0.95
+  position_limit: 0.25          # Max 25% in a single position
 
 backtest:
   initial_capital: 100000
-  commission_pct: 0.001
-  slippage_pct: 0.0005
-  strategies:
-    mean_reversion:
-      rsi_lower: 30
-      rsi_upper: 70
-    momentum:
-      sma_window: 50
+  commission_pct: 0.001         # 10 bps
+  slippage_pct: 0.0005          # 5 bps
+  currency: GBP
 
 execution:
-  mode: paper  # paper or live — NEVER default to live
-  broker:
-    host: "127.0.0.1"
-    port: 7497
-    client_id: 1
-    timeout: 10
-    max_retries: 3
-    retry_delay: 2
-  risk:
-    max_trade_pct: 0.10  # max 10% of portfolio per single trade
-    max_daily_trades: 20
-  account:
-    base_currency: GBP
+  mode: paper                   # 'paper' or 'live' (live requires --live flag)
+  broker: ibkr
+  host: "127.0.0.1"
+  port: 7497                    # TWS paper trading port
+  client_id: 1
+
+scheduler:
+  daily_run_time: "17:30"       # 30 min after LSE close (16:30)
+  timezone: Europe/London
+  retrain_day: sunday            # Day of week for model retraining
+  retrain_time: "08:00"
+  enabled: true
+
+alerts:
+  enabled: true
+  methods:
+    - log                        # Always log alerts
+  email:
+    smtp_host: ${SMTP_HOST}
+    smtp_port: 587
+    sender: ${ALERT_EMAIL_FROM}
+    recipient: ${ALERT_EMAIL_TO}
+  webhook:
+    url: ${ALERT_WEBHOOK_URL}

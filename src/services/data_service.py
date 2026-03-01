@@ -1,264 +1,126 @@
-"""Data service — clean data access layer for the dashboard.
+"""Data service — read-only access to pipeline outputs and status.
 
-Handles caching, fallbacks, and formatting so dashboard code
-never touches raw files or fetcher logic directly.
+Provides a clean interface for the dashboard and other consumers to
+query pipeline status, processed data, and portfolio weights without
+directly touching the filesystem.
 
 Usage:
     from src.services.data_service import DataService
-    svc = DataService()
-    prices = svc.get_prices(["SHEL.L", "HSBA.L"])
+    service = DataService(config)
+    status = service.get_pipeline_status()
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+import json
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Project root (three levels up from this file)
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-
 
 class DataService:
-    """Provides clean data access to the dashboard.
+    """Read-only service for accessing pipeline outputs and status."""
 
-    Handles caching, fallbacks, and formatting.
-    """
-
-    def __init__(self, config: dict[str, Any] | None = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None):
         """Initialise the data service.
 
         Args:
-            config: Optional configuration dict. If not provided, attempts
-                to load from the default settings.yaml.
+            config: Project configuration dict. If None, loads from
+                    config/settings.yaml.
         """
         if config is None:
-            try:
-                from src.utils.config import load_config
-                config = load_config()
-            except FileNotFoundError:
-                logger.warning("No settings.yaml found; using defaults")
-                config = {}
+            from src.utils.config import load_config
+            config = load_config()
 
-        self._config = config
+        self.config = config
+        self._data_dir = self._resolve_data_dir()
 
-        # Resolve data directories
-        data_dir_name = (
-            config.get("general", {}).get("data_dir", "data")
-        )
-        self._data_dir = _PROJECT_ROOT / data_dir_name
-        self._processed_dir = self._data_dir / "processed"
-        self._raw_dir = self._data_dir / "raw"
+    def _resolve_data_dir(self) -> Path:
+        """Resolve the project data directory from config."""
+        base = Path(__file__).parent.parent.parent
+        data_rel = self.config.get("general", {}).get("data_dir", "data")
+        return base / data_rel
 
-        # Universe tickers from config
-        self._tickers: list[str] = (
-            config.get("universe", {}).get("tickers", [])
-        )
+    def get_pipeline_status(self) -> dict[str, Any] | None:
+        """Read the last pipeline result from pipeline_status.json.
 
-    # ── Public API ───────────────────────────────────────────
+        Returns:
+            Pipeline status dictionary, or None if no status file exists.
+        """
+        status_path = self._data_dir / "processed" / "pipeline_status.json"
 
-    def get_prices(
-        self,
-        tickers: list[str] | None = None,
-        start: str | datetime | None = None,
-        end: str | datetime | None = None,
-    ) -> pd.DataFrame:
-        """Load price data from processed parquet files.
+        if not status_path.exists():
+            logger.debug("No pipeline status file found")
+            return None
 
-        Falls back to raw data if processed not available.
-        Returns DataFrame with tickers as columns and DatetimeIndex.
+        try:
+            with open(status_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.error(f"Failed to read pipeline status: {exc}")
+            return None
+
+    def get_target_weights(self) -> dict[str, float] | None:
+        """Read current target portfolio weights.
+
+        Returns:
+            Dictionary of ticker → weight, or None if not available.
+        """
+        weights_path = self._data_dir / "processed" / "target_weights.json"
+
+        if not weights_path.exists():
+            return None
+
+        try:
+            with open(weights_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.error(f"Failed to read target weights: {exc}")
+            return None
+
+    def get_processed_data(self, ticker: str) -> pd.DataFrame | None:
+        """Load processed OHLCV data for a single ticker.
 
         Args:
-            tickers: Ticker symbols to load. Defaults to universe.
-            start: Start date filter (inclusive).
-            end: End date filter (inclusive).
+            ticker: Ticker symbol to load.
 
         Returns:
-            DataFrame with close prices, tickers as columns.
+            Cleaned OHLCV DataFrame, or None if not available.
         """
-        tickers = tickers or self._tickers
-        if not tickers:
-            return pd.DataFrame()
+        safe_name = ticker.replace(".", "_").replace("^", "idx_")
+        parquet_path = self._data_dir / "processed" / f"{safe_name}.parquet"
+        csv_path = self._data_dir / "processed" / f"{safe_name}.csv"
 
-        frames: dict[str, pd.Series] = {}
-        for ticker in tickers:
-            df = self._load_ticker(ticker)
-            if df is not None and "Close" in df.columns:
-                frames[ticker] = df["Close"]
+        if parquet_path.exists():
+            return pd.read_parquet(parquet_path)
+        elif csv_path.exists():
+            df = pd.read_csv(csv_path, index_col=0, parse_dates=True)
+            df.index.name = "Date"
+            return df
 
-        if not frames:
-            return pd.DataFrame()
-
-        prices = pd.DataFrame(frames)
-        prices.index.name = "Date"
-
-        # Apply date filters
-        if start is not None:
-            prices = prices[prices.index >= pd.Timestamp(start)]
-        if end is not None:
-            prices = prices[prices.index <= pd.Timestamp(end)]
-
-        return prices
-
-    def get_latest_prices(self, tickers: list[str] | None = None) -> pd.Series:
-        """Most recent price for each ticker.
-
-        Args:
-            tickers: Ticker symbols. Defaults to universe.
-
-        Returns:
-            Series indexed by ticker with the latest close price.
-        """
-        prices = self.get_prices(tickers=tickers)
-        if prices.empty:
-            return pd.Series(dtype=float)
-        return prices.ffill().iloc[-1]
-
-    def get_features(self, ticker: str) -> pd.DataFrame:
-        """Load pre-computed features for a ticker from parquet.
-
-        Args:
-            ticker: Ticker symbol.
-
-        Returns:
-            DataFrame of features with DatetimeIndex, or empty DataFrame.
-        """
-        safe_name = self._safe_filename(ticker)
-        features_dir = self._processed_dir / "features"
-        path = features_dir / f"{safe_name}.parquet"
-
-        if path.exists():
-            try:
-                return pd.read_parquet(path)
-            except Exception as exc:
-                logger.error(f"Failed to load features for {ticker}: {exc}")
-
-        return pd.DataFrame()
-
-    def get_returns(
-        self,
-        tickers: list[str] | None = None,
-        window: int = 252,
-    ) -> pd.DataFrame:
-        """Compute or load returns for the specified window.
-
-        Args:
-            tickers: Ticker symbols. Defaults to universe.
-            window: Number of trading days to include.
-
-        Returns:
-            DataFrame of daily returns, tickers as columns.
-        """
-        prices = self.get_prices(tickers=tickers)
-        if prices.empty:
-            return pd.DataFrame()
-
-        # Trim to requested window (plus one day for the return calc)
-        if len(prices) > window + 1:
-            prices = prices.iloc[-(window + 1):]
-
-        returns = prices.pct_change().dropna(how="all")
-        return returns
-
-    def get_data_status(self) -> dict[str, Any]:
-        """Return summary of available data.
-
-        Returns:
-            Dict with: last_updated, tickers_available, date_range,
-            data_source, file_sizes.
-        """
-        tickers_available: list[str] = []
-        file_sizes: dict[str, int] = {}
-        last_updated: datetime | None = None
-        date_range: tuple[str, str] | None = None
-
-        # Scan processed directory first, fall back to raw
-        scan_dir = (
-            self._processed_dir
-            if self._processed_dir.exists()
-            else self._raw_dir
-        )
-
-        if scan_dir.exists():
-            for path in sorted(scan_dir.glob("*.parquet")):
-                ticker = path.stem.replace("_", ".")
-                tickers_available.append(ticker)
-                file_sizes[ticker] = path.stat().st_size
-
-                # Track most recent modification
-                mtime = datetime.fromtimestamp(path.stat().st_mtime)
-                if last_updated is None or mtime > last_updated:
-                    last_updated = mtime
-
-            # Read first available file for date range
-            if tickers_available:
-                first_file = scan_dir / f"{self._safe_filename(tickers_available[0])}.parquet"
-                if first_file.exists():
-                    try:
-                        df = pd.read_parquet(first_file)
-                        if isinstance(df.index, pd.DatetimeIndex) and len(df) > 0:
-                            date_range = (
-                                str(df.index.min().date()),
-                                str(df.index.max().date()),
-                            )
-                    except Exception:
-                        pass
-
-        data_source = self._config.get("data", {}).get("source", "unknown")
-
-        return {
-            "last_updated": last_updated,
-            "tickers_available": tickers_available,
-            "date_range": date_range,
-            "data_source": data_source,
-            "file_sizes": file_sizes,
-        }
-
-    # ── Internal helpers ─────────────────────────────────────
-
-    def _load_ticker(self, ticker: str) -> pd.DataFrame | None:
-        """Load a single ticker's OHLCV data, trying processed then raw.
-
-        Args:
-            ticker: Ticker symbol.
-
-        Returns:
-            OHLCV DataFrame or None if not found.
-        """
-        safe_name = self._safe_filename(ticker)
-
-        # Try processed first
-        for directory in (self._processed_dir, self._raw_dir):
-            path = directory / f"{safe_name}.parquet"
-            if path.exists():
-                try:
-                    df = pd.read_parquet(path)
-                    if not isinstance(df.index, pd.DatetimeIndex):
-                        df.index = pd.to_datetime(df.index)
-                    return df
-                except Exception as exc:
-                    logger.error(
-                        f"Failed to load {ticker} from {path}: {exc}"
-                    )
-
-        logger.debug(f"No data file found for {ticker}")
+        logger.debug(f"No processed data found for {ticker}")
         return None
 
-    @staticmethod
-    def _safe_filename(ticker: str) -> str:
-        """Convert a ticker symbol to a safe filename stem.
-
-        Args:
-            ticker: Ticker symbol (e.g. 'SHEL.L', '^FTSE').
+    def list_available_tickers(self) -> list[str]:
+        """List tickers that have processed data available.
 
         Returns:
-            Filesystem-safe string.
+            Sorted list of ticker symbols with processed data on disk.
         """
-        return ticker.replace(".", "_").replace("^", "idx_")
+        processed_dir = self._data_dir / "processed"
+        if not processed_dir.exists():
+            return []
+
+        tickers = []
+        for path in processed_dir.iterdir():
+            if path.suffix in (".parquet", ".csv") and path.stem != "pipeline_status":
+                # Reverse the safe-name transformation
+                name = path.stem.replace("idx_", "^").replace("_", ".")
+                tickers.append(name)
+
+        return sorted(tickers)
