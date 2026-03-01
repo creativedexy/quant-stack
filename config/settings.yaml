@@ -1,0 +1,44 @@
+# Quant Stack — Master Configuration
+# All ${ENV_VAR} placeholders are resolved at runtime.
+
+general:
+  base_currency: GBP
+  timezone: Europe/London
+  log_level: INFO
+  data_dir: data
+  random_seed: 42
+
+universe:
+  name: uk_large_cap
+  tickers:
+    - SHEL.L
+    - AZN.L
+    - HSBA.L
+    - ULVR.L
+    - BP.L
+  benchmark: ^FTSE
+
+data:
+  source: synthetic            # synthetic | yfinance | alpha_vantage
+  start_date: "2020-01-01"
+  end_date: null
+  interval: "1d"
+  fields: [Open, High, Low, Close, Volume]
+  adjust_prices: true
+  output_format: parquet
+
+  live:
+    price_cache_ttl: 60        # seconds
+    fallback_chain: [ib, yfinance, alpha_vantage, cached]
+    request_timeout: 10        # seconds per source
+
+features:
+  technical:
+    sma_windows: [5, 20, 50]
+    rsi_window: 14
+  returns:
+    windows: [1, 5, 21]
+    log_returns: true
+
+api_keys:
+  alpha_vantage: ${ALPHA_VANTAGE_API_KEY}
