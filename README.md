@@ -35,6 +35,25 @@ python -m scripts.fetch_data --source yfinance
 pytest tests/ -v
 ```
 
+## View the Dashboard
+
+Three steps to see the dashboard:
+
+```bash
+# 1. Install dashboard dependencies
+pip install -e ".[dashboard]"
+
+# 2. Generate sample data (works offline, no API keys needed)
+python -m scripts.fetch_data --source synthetic
+
+# 3. Launch the dashboard
+streamlit run app.py
+```
+
+A browser tab will open automatically at `http://localhost:8501`.
+
+**Using Claude Code on the web?** The dashboard will appear in the preview panel — no extra setup needed.
+
 ## Project Structure
 
 See [CLAUDE.md](CLAUDE.md) for full architecture documentation.

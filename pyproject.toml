@@ -76,6 +76,12 @@ api = [
     "httpx>=0.27",
 ]
 
+# Dashboard UI
+dashboard = [
+    "streamlit>=1.28",
+    "plotly>=5.17",
+]
+
 # Development tools
 dev = [
     "pytest>=7.4",
@@ -87,7 +93,7 @@ dev = [
 
 # Install everything
 all = [
-    "quant-stack[ml-extended,portfolio,backtest,data-live,execution,research,api,dev]",
+    "quant-stack[ml-extended,portfolio,backtest,data-live,execution,research,api,dashboard,dev]",
 ]
 
 [tool.setuptools.packages.find]
