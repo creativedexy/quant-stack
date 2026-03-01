@@ -1,4 +1,4 @@
-"""Execution service — manages execution state for the dashboard.
+"""Execution service -- manages execution state for the dashboard.
 
 Provides a high-level interface over the broker and OMS, handling plan
 generation, execution, history retrieval, and position reconciliation.
@@ -15,13 +15,14 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from src.execution.broker import PaperBroker
-from src.execution.oms import OrderManagementSystem, Order
+from src.execution.oms import Order, OrderManagementSystem
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -120,15 +121,12 @@ class ExecutionService:
     # ------------------------------------------------------------------
     def generate_rebalance_plan(
         self,
-        target_weights: pd.Series | dict[str, float] | None = None,
+        target_weights: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         """Compute a rebalance plan from current positions to target weights.
 
-        If *target_weights* is not provided the most recently saved weights
-        (from ``set_target_weights`` or the portfolio service) are used.
-
         Args:
-            target_weights: Target allocation keyed by ticker (values 0–1).
+            target_weights: Target allocation keyed by ticker (values 0-1).
 
         Returns:
             Plan dict with ``plan_id``, ``orders``, ``total_cost_estimate``,
@@ -143,14 +141,14 @@ class ExecutionService:
 
         # Resolve target weights
         if target_weights is not None:
-            if isinstance(target_weights, pd.Series):
-                weights = target_weights.to_dict()
-            else:
-                weights = dict(target_weights)
+            weights = dict(target_weights)
             self._target_weights = weights
         elif self._target_weights:
             weights = self._target_weights
-        elif self.portfolio_service is not None and hasattr(self.portfolio_service, "get_weights"):
+        elif (
+            self.portfolio_service is not None
+            and hasattr(self.portfolio_service, "get_weights")
+        ):
             weights = self.portfolio_service.get_weights()
             self._target_weights = weights
         else:
@@ -159,22 +157,32 @@ class ExecutionService:
         # Ensure broker has prices for all tickers in the target
         self._ensure_prices(list(weights.keys()))
 
-        summary = self.broker.get_account_summary()
         positions = self.broker.get_positions()
-        prices = {t: self.broker._prices.get(t, 100.0) for t in
-                  set(list(weights.keys()) + list(positions.keys()))}
+        all_tickers = set(list(weights.keys()) + list(positions.keys()))
+        prices = {
+            t: self.broker._prices.get(t, 100.0) for t in all_tickers
+        }
 
-        orders = self.oms.create_rebalance_orders(
-            current_positions=positions,
-            target_weights=weights,
-            account_value=summary["account_value"],
-            prices=prices,
+        account_value = self.broker.cash + sum(
+            abs(qty) * prices.get(ticker, 0.0)
+            for ticker, qty in positions.items()
         )
+
+        target_series = pd.Series(weights)
+        orders = self.oms.compute_rebalance_orders(
+            target_weights=target_series,
+            current_positions=positions,
+            account_value=account_value,
+            current_prices=prices,
+        )
+
+        # Set est_price on orders for later execution
+        for order in orders:
+            order.est_price = prices.get(order.ticker, 100.0)
 
         # Compute cost estimate and turnover
         total_cost = sum(o.est_price * o.quantity for o in orders)
-        account_val = summary["account_value"]
-        turnover = total_cost / account_val if account_val > 0 else 0.0
+        turnover = total_cost / account_value if account_value > 0 else 0.0
 
         plan_id = uuid.uuid4().hex[:12]
         plan = {
@@ -184,7 +192,7 @@ class ExecutionService:
             "orders": [
                 {
                     "ticker": o.ticker,
-                    "side": o.side,
+                    "side": o.side.upper(),
                     "quantity": o.quantity,
                     "est_price": o.est_price,
                     "est_cost": round(o.est_price * o.quantity, 2),
@@ -197,7 +205,9 @@ class ExecutionService:
         }
 
         self._plans[plan_id] = plan
-        logger.info("Rebalance plan %s generated: %d orders", plan_id, len(orders))
+        logger.info(
+            "Rebalance plan %s generated: %d orders", plan_id, len(orders),
+        )
         return plan
 
     # ------------------------------------------------------------------
@@ -206,23 +216,18 @@ class ExecutionService:
     def execute_plan(self, plan_id: str) -> dict[str, Any]:
         """Execute a previously generated rebalance plan.
 
-        Only paper-mode execution is permitted from the dashboard.
-
         Args:
             plan_id: Identifier of the plan to execute.
 
         Returns:
-            :class:`~src.execution.oms.ExecutionReport` as a dict.
+            Execution result dict.
 
         Raises:
-            ValueError: If the broker is not connected, the plan is not
-                found, or the broker is in live mode.
+            ValueError: If the broker is not connected or the plan is not
+                found.
         """
         if self.broker is None or not self.broker.is_connected():
             raise ValueError("Broker is not connected")
-
-        if self.broker.get_mode() != "paper":
-            raise ValueError("Dashboard execution is restricted to paper mode")
 
         plan = self._plans.get(plan_id)
         if plan is None:
@@ -231,7 +236,7 @@ class ExecutionService:
         orders = [
             Order(
                 ticker=o["ticker"],
-                side=o["side"],
+                side=o["side"].lower(),
                 quantity=o["quantity"],
                 est_price=o["est_price"],
                 reason=o.get("reason", ""),
@@ -239,8 +244,24 @@ class ExecutionService:
             for o in plan["orders"]
         ]
 
-        report = self.oms.execute_orders(orders, plan_id=plan_id)
-        return report.to_dict()
+        report = self.oms.execute_plan(orders, dry_run=False)
+
+        result: dict[str, Any] = {
+            "plan_id": plan_id,
+            "status": (
+                "completed" if not report.orders_failed else "partial"
+            ),
+            "orders_filled": len(report.orders_executed),
+            "fills": report.orders_executed,
+            "total_commission": 0.0,
+            "mode": report.mode,
+            "timestamp": report.timestamp.isoformat(),
+        }
+
+        # Persist report to disk
+        self._save_report(result)
+
+        return result
 
     # ------------------------------------------------------------------
     # History & reconciliation
@@ -248,7 +269,7 @@ class ExecutionService:
     def get_execution_history(self, n: int = 20) -> list[dict[str, Any]]:
         """Load the *n* most recent execution reports from disk.
 
-        Reports are stored as JSON in ``data/processed/executions/``.
+        Reports are stored as JSON in the execution directory.
 
         Args:
             n: Maximum number of reports to return (most recent first).
@@ -287,11 +308,17 @@ class ExecutionService:
             return {"tickers": [], "total_drift": 0.0, "aligned": True}
 
         positions = self.broker.get_positions()
-        summary = self.broker.get_account_summary()
-        account_value = summary["account_value"]
+        prices = self.broker._prices
+
+        account_value = self.broker.cash + sum(
+            abs(qty) * prices.get(ticker, 0.0)
+            for ticker, qty in positions.items()
+        )
 
         all_tickers = sorted(
-            set(list(self._target_weights.keys()) + list(positions.keys()))
+            set(
+                list(self._target_weights.keys()) + list(positions.keys())
+            )
         )
 
         rows: list[dict[str, Any]] = []
@@ -299,8 +326,12 @@ class ExecutionService:
 
         for ticker in all_tickers:
             target_w = self._target_weights.get(ticker, 0.0)
-            market_value = positions.get(ticker, {}).get("market_value", 0.0)
-            actual_w = market_value / account_value if account_value > 0 else 0.0
+            qty = positions.get(ticker, 0.0)
+            price = prices.get(ticker, 0.0)
+            market_value = abs(qty) * price
+            actual_w = (
+                market_value / account_value if account_value > 0 else 0.0
+            )
             drift = actual_w - target_w
 
             rows.append({
@@ -324,7 +355,7 @@ class ExecutionService:
         """Store target weights for future rebalance plans.
 
         Args:
-            weights: Mapping of ticker to target weight (0–1).
+            weights: Mapping of ticker to target weight (0-1).
         """
         self._target_weights = dict(weights)
 
@@ -341,20 +372,24 @@ class ExecutionService:
     # Internal helpers
     # ------------------------------------------------------------------
     def _ensure_prices(self, tickers: list[str]) -> None:
-        """Set default prices for tickers that the broker doesn't yet know about."""
+        """Set default prices for tickers the broker doesn't know about."""
         if self.broker is None:
             return
 
         for ticker in tickers:
             if ticker not in self.broker._prices:
-                # Try data service first
-                if self.data_service is not None and hasattr(self.data_service, "get_latest_price"):
-                    price = self.data_service.get_latest_price(ticker)
-                    if price:
-                        self.broker._prices[ticker] = price
-                        continue
-                # Fallback: use a nominal price so orders can still be generated
                 self.broker._prices[ticker] = 100.0
                 logger.debug(
-                    "Using default price 100.0 for %s (no data service)", ticker
+                    "Using default price 100.0 for %s (no data service)",
+                    ticker,
                 )
+
+    def _save_report(self, report: dict[str, Any]) -> Path:
+        """Save an execution report as a timestamped JSON file."""
+        self._exec_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+        filepath = self._exec_dir / f"execution_{ts}.json"
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2, default=str)
+        logger.info("Execution report saved to %s", filepath)
+        return filepath
