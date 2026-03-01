@@ -1,0 +1,115 @@
+# Quant Stack — Configuration
+# All parameters in one place. Never hardcode values in source.
+# Environment variable substitution: ${ENV_VAR} is resolved at load time.
+
+general:
+  base_currency: GBP
+  timezone: Europe/London
+  log_level: INFO
+  data_dir: data
+  random_seed: 42
+
+universe:
+  name: uk_large_cap
+  tickers:
+    - SHEL.L    # Shell
+    - AZN.L     # AstraZeneca
+    - HSBA.L    # HSBC
+    - ULVR.L    # Unilever
+    - BP.L      # BP
+    - GSK.L     # GSK
+    - RIO.L     # Rio Tinto
+    - DGE.L     # Diageo
+    - REL.L     # RELX
+    - LSEG.L    # London Stock Exchange Group
+  benchmark: ^FTSE
+
+data:
+  source: synthetic         # 'synthetic' for testing, 'yfinance' for live
+  start_date: "2020-01-01"
+  end_date: null             # null = today
+  interval: 1d
+  fields:
+    - Open
+    - High
+    - Low
+    - Close
+    - Volume
+  adjust_prices: true
+  output_format: parquet
+
+features:
+  technical:
+    sma_windows: [5, 20, 50, 200]
+    ema_windows: [12, 26]
+    rsi_window: 14
+    macd:
+      fast: 12
+      slow: 26
+      signal: 9
+    bollinger:
+      window: 20
+      num_std: 2
+  returns:
+    windows: [1, 5, 21]
+    log_returns: true
+
+models:
+  type: random_forest
+  walk_forward:
+    train_months: 24
+    test_months: 3
+    step_months: 1
+  retrain_frequency: weekly    # 'weekly', 'monthly', or 'on_demand'
+  performance_threshold:
+    min_ic: 0.02               # Minimum information coefficient before alert
+
+portfolio:
+  optimisation:
+    method: mean_variance       # 'mean_variance', 'risk_parity', 'equal_weight'
+    risk_free_rate: 0.0425      # Current UK base rate
+  constraints:
+    max_weight: 0.20            # Maximum 20% in any single asset
+    min_weight: 0.02            # Minimum 2% if held
+    max_sector_weight: 0.40
+  rebalance:
+    frequency: monthly          # 'daily', 'weekly', 'monthly', 'quarterly'
+    threshold: 0.05             # Rebalance if drift exceeds 5%
+
+risk:
+  max_drawdown: 0.15            # Alert if portfolio drawdown exceeds 15%
+  max_correlation: 0.85         # Alert if pairwise correlation exceeds this
+  var_confidence: 0.95
+  position_limit: 0.25          # Max 25% in a single position
+
+backtest:
+  initial_capital: 100000
+  commission_pct: 0.001         # 10 bps
+  slippage_pct: 0.0005          # 5 bps
+  currency: GBP
+
+execution:
+  mode: paper                   # 'paper' or 'live' (live requires --live flag)
+  broker: ibkr
+  host: "127.0.0.1"
+  port: 7497                    # TWS paper trading port
+  client_id: 1
+
+scheduler:
+  daily_run_time: "17:30"       # 30 min after LSE close (16:30)
+  timezone: Europe/London
+  retrain_day: sunday            # Day of week for model retraining
+  retrain_time: "08:00"
+  enabled: true
+
+alerts:
+  enabled: true
+  methods:
+    - log                        # Always log alerts
+  email:
+    smtp_host: ${SMTP_HOST}
+    smtp_port: 587
+    sender: ${ALERT_EMAIL_FROM}
+    recipient: ${ALERT_EMAIL_TO}
+  webhook:
+    url: ${ALERT_WEBHOOK_URL}

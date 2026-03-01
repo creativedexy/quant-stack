@@ -26,6 +26,9 @@ dependencies = [
 
     # ML - Classical
     "scikit-learn>=1.3",
+
+    # Scheduling
+    "apscheduler>=3.10",
 ]
 
 [project.optional-dependencies]
