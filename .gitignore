@@ -38,3 +38,10 @@ config/secrets.yaml
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Reports (generated output, keep directory via .gitkeep)
+reports/*
+!reports/.gitkeep
+
+# Logs
+*.log

@@ -1,0 +1,27 @@
+# Dashboard configuration for Quant Stack
+# Loaded by src/services/ — separate from main settings.yaml
+
+dashboard:
+  title: "Quant Stack"
+  refresh_interval: 300  # seconds between auto-refresh
+  cache_ttl: 600         # seconds to cache expensive computations
+  default_page: overview
+  theme: dark
+  currency_symbol: "£"
+  timezone: Europe/London
+  chart_height: 400
+
+pages:
+  overview:
+    enabled: true
+    metrics: [portfolio_value, daily_pnl, sharpe, max_drawdown]
+  strategy:
+    enabled: true
+    default_strategy: mean_reversion
+  portfolio:
+    enabled: true
+  research:
+    enabled: true
+  execution:
+    enabled: true
+    require_confirmation: true

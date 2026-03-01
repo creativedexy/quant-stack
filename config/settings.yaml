@@ -1,7 +1,3 @@
-# Quant Stack — Configuration
-# All parameters in one place. Never hardcode values in source.
-# Environment variable substitution: ${ENV_VAR} is resolved at load time.
-
 general:
   base_currency: GBP
   timezone: Europe/London
