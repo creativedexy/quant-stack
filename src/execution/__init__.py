@@ -6,6 +6,23 @@ an order management system for executing rebalance plans.
 
 from src.execution.broker import Broker, PaperBroker
 from src.execution.oms import Order, ExecutionReport, OrderManagementSystem
+"""Order execution and broker connectivity.
+
+Public API::
+
+    from src.execution import (
+        Broker,
+        PaperBroker,
+        IBBroker,
+        create_broker,
+        OrderManagementSystem,
+        Order,
+        ExecutionReport,
+    )
+"""
+
+from src.execution.broker import Broker, IBBroker, PaperBroker, create_broker
+from src.execution.oms import ExecutionReport, Order, OrderManagementSystem
 
 __all__ = [
     "Broker",
@@ -13,4 +30,9 @@ __all__ = [
     "Order",
     "ExecutionReport",
     "OrderManagementSystem",
+    "IBBroker",
+    "create_broker",
+    "OrderManagementSystem",
+    "Order",
+    "ExecutionReport",
 ]
