@@ -20,13 +20,14 @@ quant-stack/
 ├── CLAUDE.md              # This file — project context
 ├── README.md              # User-facing documentation
 ├── pyproject.toml         # Dependencies and project metadata
-├── config/
-│   └── settings.yaml      # API keys, universe definitions, risk params
 ├── data/
 │   ├── raw/               # Untouched downloaded data
 │   ├── processed/         # Cleaned, normalised Parquet files
 │   └── synthetic/         # Generated test data
 ├── notebooks/             # Jupyter research notebooks (import from src/)
+├── config/
+│   ├── settings.yaml      # API keys, universe definitions, risk params
+│   └── dashboard.yaml     # UI-specific configuration
 ├── src/
 │   ├── __init__.py
 │   ├── data/              # Data fetching & cleaning
@@ -57,6 +58,9 @@ quant-stack/
 │   │   ├── __init__.py
 │   │   ├── broker.py      # IBAPI connection
 │   │   └── oms.py         # Order management system
+│   ├── dashboard/         # Streamlit app and page modules
+│   ├── services/          # Service layer between UI and quant modules
+│   ├── scheduler/         # APScheduler-based pipeline automation
 │   └── utils/             # Shared utilities
 │       ├── __init__.py
 │       ├── config.py      # YAML config loader
@@ -116,6 +120,12 @@ quant-stack/
 ### Execution (Phase 6, requires broker)
 - ibapi — Interactive Brokers API
 
+### Dashboard & Services (Sprint 1-4)
+- streamlit — dashboard UI
+- plotly — interactive charts
+- apscheduler — pipeline scheduling
+- requests — API fallback clients
+
 ## Testing Strategy
 - **Unit tests** with pytest for all modules
 - **Synthetic data** via `src/data/synthetic.py` for offline testing
@@ -132,3 +142,42 @@ quant-stack/
 6. Backtest in `src/backtest/` with realistic transaction costs
 7. Review tear sheet from Pyfolio
 8. If validated, deploy to paper trading via `src/execution/`
+
+## Dashboard & UI Layer
+
+### Architecture
+The UI is a Streamlit dashboard that reads from the existing data pipeline outputs.
+No direct database — the file system (parquet files in data/processed/) IS the data store.
+A scheduler service runs the pipeline daily; the dashboard reads the results.
+
+Directory additions:
+- src/dashboard/           — Streamlit app and page modules
+- src/services/            — Service layer between UI and quant modules
+- src/scheduler/           — APScheduler-based pipeline automation
+- config/dashboard.yaml    — UI-specific configuration
+
+### Service Layer Pattern
+The dashboard NEVER imports from src/data, src/features, src/models directly.
+It calls service functions that handle caching, error handling, and data formatting.
+Services return plain dicts or DataFrames — no internal types leak to the UI.
+
+### Live Data Strategy
+- End-of-day: yfinance (free, already integrated)
+- Intraday: IB market data (when connected for execution)
+- Fallback chain: IB → yfinance → cached data → synthetic
+- All data access goes through DataService, which manages the fallback
+
+### Dashboard Pages
+1. Overview — portfolio value, daily P&L, key risk metrics, signals
+2. Strategy — backtest results, strategy comparison, signal charts
+3. Portfolio — current weights, target weights, rebalance orders
+4. Research — feature explorer, correlation heatmap, model diagnostics
+5. Execution — paper trade controls, order history, reconciliation
+
+### UI Conventions
+- Streamlit with st.set_page_config(layout="wide")
+- Colour scheme: dark theme compatible
+- Charts: plotly for interactive, matplotlib for static exports
+- All monetary values formatted with £ symbol and 2 decimal places
+- Timestamps in Europe/London timezone
+- Cache expensive computations with @st.cache_data (TTL from config)

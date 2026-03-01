@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "quant-stack"
@@ -26,6 +26,9 @@ dependencies = [
 
     # ML - Classical
     "scikit-learn>=1.3",
+
+    # Scheduling
+    "apscheduler>=3.10",
 ]
 
 [project.optional-dependencies]
