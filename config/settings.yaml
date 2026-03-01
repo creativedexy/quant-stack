@@ -1,3 +1,6 @@
+# Quant Stack — Master Configuration
+# All ${ENV_VAR} placeholders are resolved at runtime.
+
 general:
   base_currency: GBP
   timezone: Europe/London
@@ -8,48 +11,37 @@ general:
 universe:
   name: uk_large_cap
   tickers:
-    - SHEL.L    # Shell
-    - AZN.L     # AstraZeneca
-    - HSBA.L    # HSBC
-    - ULVR.L    # Unilever
-    - BP.L      # BP
-    - GSK.L     # GSK
-    - RIO.L     # Rio Tinto
-    - DGE.L     # Diageo
-    - REL.L     # RELX
-    - LSEG.L    # London Stock Exchange Group
+    - SHEL.L
+    - AZN.L
+    - HSBA.L
+    - ULVR.L
+    - BP.L
   benchmark: ^FTSE
 
 data:
-  source: synthetic         # 'synthetic' for testing, 'yfinance' for live
+  source: synthetic            # synthetic | yfinance | alpha_vantage
   start_date: "2020-01-01"
-  end_date: null             # null = today
-  interval: 1d
-  fields:
-    - Open
-    - High
-    - Low
-    - Close
-    - Volume
+  end_date: null
+  interval: "1d"
+  fields: [Open, High, Low, Close, Volume]
   adjust_prices: true
   output_format: parquet
 
+  live:
+    price_cache_ttl: 60        # seconds
+    fallback_chain: [ib, yfinance, alpha_vantage, cached]
+    request_timeout: 10        # seconds per source
+
 features:
   technical:
-    sma_windows: [5, 20, 50, 200]
-    ema_windows: [12, 26]
+    sma_windows: [5, 20, 50]
     rsi_window: 14
-    macd:
-      fast: 12
-      slow: 26
-      signal: 9
-    bollinger:
-      window: 20
-      num_std: 2
   returns:
     windows: [1, 5, 21]
     log_returns: true
 
+api_keys:
+  alpha_vantage: ${ALPHA_VANTAGE_API_KEY}
 models:
   type: random_forest
   walk_forward:
