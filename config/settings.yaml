@@ -34,16 +34,23 @@ data:
 
 features:
   technical:
-    sma_windows: [5, 20, 50]
+    sma_windows: [5, 10, 20, 50, 200]
     rsi_window: 14
   returns:
-    windows: [1, 5, 21]
+    windows: [1, 5, 10, 21, 63, 252]
     log_returns: true
 
 api_keys:
   alpha_vantage: ${ALPHA_VANTAGE_API_KEY}
 models:
   type: random_forest
+  random_forest:
+    n_estimators: 200
+    max_depth: 10
+  gradient_boosting:
+    n_estimators: 300
+    learning_rate: 0.05
+    subsample: 0.8
   walk_forward:
     train_months: 24
     test_months: 3

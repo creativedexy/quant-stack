@@ -118,6 +118,9 @@ class FeaturePipeline:
         features = self.generate(data, cutoff_date=cutoff_date)
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        # Strip DatetimeIndex freq so parquet round-trip is lossless
+        # (pandas does not preserve freq attributes through parquet)
+        features.index.freq = None
         features.to_parquet(output_path)
         logger.info("Saved features to %s (%d rows)", output_path, len(features))
         return output_path
@@ -190,6 +193,8 @@ class FeaturePipeline:
             features.index.max().date() if not features.empty else "N/A",
         )
 
+        # Strip DatetimeIndex freq to ensure consistency with parquet round-trips
+        features.index.freq = None
         return features
 
     def _run_single_compat(

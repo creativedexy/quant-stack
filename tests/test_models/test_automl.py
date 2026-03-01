@@ -24,6 +24,8 @@ from src.features.pipeline import FeaturePipeline
 from src.models.automl import quick_compare, PyCaretModel
 from src.models.base import QuantModel
 
+pytest.importorskip("pycaret", reason="PyCaret not installed")
+
 
 # ------------------------------------------------------------------
 # Fixtures
