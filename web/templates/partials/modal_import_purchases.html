@@ -1,0 +1,20 @@
+<div class="modal-card">
+  <h3>Import Purchases (CSV)</h3>
+  <p class="muted" style="font-size: 0.75rem; margin-bottom: 0.75rem;">
+    Expected columns: <code>date,ticker,price,amount_gbp,note</code><br>
+    Price in pence. Amount in GBP. Note is optional.
+  </p>
+  <form hx-post="/ui/upload/purchases/preview"
+        hx-target="#import-preview"
+        hx-encoding="multipart/form-data">
+
+    <label>CSV File</label>
+    <input type="file" name="file" accept=".csv" required
+           class="chart-select" style="width: 100%; margin-bottom: 0.5rem;">
+
+    <button type="submit" class="btn btn-sm btn-accent" style="width: 100%;">
+      Preview
+    </button>
+  </form>
+  <div id="import-preview" style="margin-top: 0.75rem;"></div>
+</div>

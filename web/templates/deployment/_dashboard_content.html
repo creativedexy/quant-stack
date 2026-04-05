@@ -1,0 +1,120 @@
+  <div class="exec-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem;">
+    <div>
+      <h1 style="margin:0; font-size:1.5rem;">Capital Deployment</h1>
+      <p style="margin:0.25rem 0 0; color:var(--text-muted); font-size:0.85rem;">
+        Autonomous scanning, analysis, and trade execution pipeline
+      </p>
+    </div>
+    <span class="status-badge status-{{ cycle_status.state|lower|replace('awaiting_approval','awaiting') }}">
+      {{ cycle_status.state }}
+    </span>
+  </div>
+
+  {#- Key metrics -#}
+  <div class="deploy-grid">
+    <div class="deploy-stat-card">
+      <div class="deploy-stat-label">Capital Available</div>
+      <div class="deploy-stat-value" style="color:var(--green);">
+        &pound;{{ "%.2f"|format(capital_available) }}
+      </div>
+    </div>
+    <div class="deploy-stat-card">
+      <div class="deploy-stat-label">Capital Deployed</div>
+      <div class="deploy-stat-value">
+        &pound;{{ "%.2f"|format(capital_deployed) }}
+      </div>
+    </div>
+    <div class="deploy-stat-card">
+      <div class="deploy-stat-label">Total Cycles</div>
+      <div class="deploy-stat-value">{{ memory_summary.total_cycles|default(0) }}</div>
+    </div>
+    <div class="deploy-stat-card">
+      <div class="deploy-stat-label">Opus Cost</div>
+      <div class="deploy-stat-value" style="font-size:1.2rem;">
+        {% set _cost = memory_summary.get('cost_summary', {}) if memory_summary is mapping else {} %}
+        &pound;{{ "%.2f"|format(_cost.estimated_gbp_total|default(0)) }}
+      </div>
+    </div>
+  </div>
+
+  {#- Actions -#}
+  <div class="deploy-actions">
+    <button
+      hx-post="/ui/execute/deployment/run"
+      hx-target="#deployment-content"
+      hx-swap="innerHTML"
+      hx-vals='{"dry_run": "true", "use_opus": "true"}'
+      class="btn"
+      style="background:var(--cyan); color:#000; font-weight:600; padding:0.6rem 1.25rem; border-radius:6px;"
+    >
+      Run New Cycle
+    </button>
+    <button
+      hx-post="/ui/execute/deployment/run"
+      hx-target="#deployment-content"
+      hx-swap="innerHTML"
+      hx-vals='{"dry_run": "true", "use_opus": "false"}'
+      class="btn"
+      style="background:var(--card-alt); padding:0.6rem 1.25rem; border-radius:6px;"
+    >
+      Run (Keyword Only)
+    </button>
+    <a href="/ui/execute/deployment/memory"
+       class="btn"
+       style="background:var(--card-alt); padding:0.6rem 1.25rem; border-radius:6px; text-decoration:none;">
+      Memory
+    </a>
+  </div>
+
+  {#- Last cycle summary -#}
+  {% if last_cycle %}
+  <div class="deploy-section" style="border-color:var(--green);">
+    <h3 style="color:var(--green);">Cycle Complete: {{ last_cycle.cycle_id }}</h3>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:0.5rem; font-size:0.85rem;">
+      <div><span style="color:var(--text-muted);">Scanned:</span> <strong>{{ last_cycle.candidates_scanned }}</strong></div>
+      <div><span style="color:var(--text-muted);">Enriched:</span> <strong>{{ last_cycle.candidates_enriched }}</strong></div>
+      <div><span style="color:var(--text-muted);">Scored:</span> <strong>{{ last_cycle.candidates_scored }}</strong></div>
+      <div><span style="color:var(--text-muted);">Above threshold:</span> <strong>{{ last_cycle.candidates_above_threshold }}</strong></div>
+      <div><span style="color:var(--text-muted);">Trades queued:</span> <strong style="color:var(--cyan);">{{ last_cycle.trades_queued }}</strong></div>
+      <div><span style="color:var(--text-muted);">Duration:</span> <strong>{{ "%.1f"|format(last_cycle.duration_seconds) }}s</strong></div>
+    </div>
+    <div style="margin-top:0.75rem; display:flex; gap:1.25rem; flex-wrap:wrap;">
+      <a href="/ui/execute/deployment/checkpoint"
+         style="color:var(--amber); font-weight:600; font-size:0.9rem;">
+        View Reasoning &amp; Scores &rarr;
+      </a>
+      {% if last_cycle.trades_queued > 0 %}
+      <a href="/ui/execute/deployment/queue"
+         style="color:var(--cyan); font-weight:600; font-size:0.9rem;">
+        View Trade Queue &rarr;
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {#- Pipeline status (auto-refreshes while running) -#}
+  {% if cycle_status.state not in ['IDLE', 'COMPLETE'] %}
+  <div class="deploy-section"
+       hx-get="/ui/execute/deployment/status"
+       hx-trigger="every 5s"
+       hx-swap="outerHTML">
+    <h3>Pipeline Status</h3>
+    <p style="font-family:'IBM Plex Mono',monospace; color:var(--amber);">
+      {{ cycle_status.state }}
+      {% if cycle_status.state == 'AWAITING_APPROVAL' %}
+        -- <a href="/ui/execute/deployment/checkpoint" style="color:var(--cyan);">Review Candidates</a>
+      {% endif %}
+    </p>
+  </div>
+  {% endif %}
+
+  {#- Memory health -#}
+  <div class="deploy-section">
+    <h3>Memory Health</h3>
+    <div style="font-size:0.85rem;">
+      <p style="margin:0.25rem 0;"><span style="color:var(--text-muted);">Watchlist:</span> {{ (memory_summary.watchlist|default([]))|length }} tickers</p>
+      <p style="margin:0.25rem 0;"><span style="color:var(--text-muted);">Excluded:</span> {{ (memory_summary.excluded_tickers|default([]))|length }} tickers</p>
+      <p style="margin:0.25rem 0;"><span style="color:var(--text-muted);">Sector trends:</span> {{ memory_summary.learnings_count|default(0) }}</p>
+    </div>
+  </div>

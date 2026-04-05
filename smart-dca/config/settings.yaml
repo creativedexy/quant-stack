@@ -1,0 +1,38 @@
+binance:
+  testnet: true                        # override via BINANCE_TESTNET env var
+  request_timeout_seconds: 10
+
+schedule:
+  evaluation_interval_minutes: 15      # how often scorer runs
+  weekly_reset_day: "monday"           # when budget resets
+  weekly_reset_hour_utc: 9
+
+scoring:
+  buy_threshold: 65                    # composite score 0-100 above which we buy
+  notify_threshold: 55                 # score above which we send alert (but don't buy)
+  signal_weights:
+    seasonality: 0.20
+    mean_reversion: 0.35
+    funding_rate: 0.25
+    sentiment: 0.20
+
+signals:
+  mean_reversion_dip_pct: 4.0         # % drop in 24h to trigger signal
+  mean_reversion_window_hours: 24
+  funding_rate_negative_threshold: -0.01  # % below which is bullish for spot
+  sentiment_fear_threshold: 30         # F&G index below this = buy signal
+  seasonality_scores:                  # 0.0-1.0 score per UTC hour window
+    peak_hours: [14, 15, 16, 17, 18]  # historically lower vol, better spread
+    low_hours: [0, 1, 2, 3, 4, 5]
+
+risk:
+  max_single_order_gbp: 50.0
+  min_balance_buffer_gbp: 10.0
+  max_daily_loss_pct: 5.0
+  halt_on_loss: true
+
+execution:
+  state_file: "data/budget_state.json"
+
+monitor:
+  db_path: "data/performance.db"

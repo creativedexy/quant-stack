@@ -1,0 +1,42 @@
+<div class="modal-card">
+  <h3>Add Purchase</h3>
+  <form class="dca-form"
+        hx-post="/ui/portfolio/dca/purchase"
+        hx-target="#modal-container"
+        hx-on::after-request="if(event.detail.successful){document.getElementById('modal-container').innerHTML='<div class=\'modal-card\'><p class=\'modal-success\'>Purchase saved.</p><button class=\'btn btn-sm\' onclick=\'document.getElementById(\\\'modal-container\\\').innerHTML=\\\'\\\'\'>Close</button></div>'}">
+
+    <div class="dca-field">
+      <label for="modal-ticker">Ticker</label>
+      <input type="text" id="modal-ticker" name="ticker" required placeholder="e.g. CNDX.L"
+             class="chart-select">
+    </div>
+
+    <div class="dca-field">
+      <label for="modal-date">Date</label>
+      <input type="date" id="modal-date" name="date" required
+             class="chart-select">
+    </div>
+
+    <div class="dca-field">
+      <label for="modal-price">Price (pence)</label>
+      <input type="number" id="modal-price" name="price" step="0.01" min="0" required
+             class="chart-select" placeholder="e.g. 1383">
+    </div>
+
+    <div class="dca-field">
+      <label for="modal-amount">Amount (GBP)</label>
+      <input type="number" id="modal-amount" name="amount_gbp" step="0.01" min="0" required
+             class="chart-select" placeholder="e.g. 250">
+    </div>
+
+    <div class="dca-field">
+      <label for="modal-note">Note</label>
+      <input type="text" id="modal-note" name="note" placeholder="Optional"
+             class="chart-select">
+    </div>
+
+    <button type="submit" class="btn btn-sm btn-accent dca-submit">
+      Save Purchase
+    </button>
+  </form>
+</div>

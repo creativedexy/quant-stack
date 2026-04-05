@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Strategy — Quant Stack{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 1.5rem;">Strategy</h1>
+
+<div class="strategy-grid">
+
+  {# Left panel — strategy selector #}
+  <div class="card strategy-sidebar">
+    <h3 style="margin-bottom: 0.75rem;">Strategies</h3>
+    {% if strategies %}
+    <ul class="strategy-list">
+      {% for name in strategies %}
+      <li>
+        <button class="strategy-item"
+                hx-get="/ui/partials/strategy-detail?strategy={{ name }}"
+                hx-target="#strategy-detail"
+                hx-swap="innerHTML"
+                hx-indicator="#spinner">
+          {{ name | replace("_", " ") | title }}
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted" style="text-align: center; padding: 1rem 0;">
+      No strategies registered
+    </p>
+    {% endif %}
+  </div>
+
+  {# Right panel — strategy detail (HTMX swap target) #}
+  <div class="card strategy-main">
+    <div id="strategy-detail">
+      <p class="muted" style="text-align: center; padding: 3rem 0;">
+        Select a strategy from the list to view details
+      </p>
+    </div>
+  </div>
+
+</div>
+
+{# Spinner #}
+<div id="spinner" class="htmx-indicator spinner"></div>
+{% endblock %}

@@ -1,0 +1,79 @@
+{# Position detail — Level 4 HTMX fragment.
+   Loaded when a heatmap tile is clicked.
+#}
+{% if detail %}
+<div class="position-detail-content">
+  <h4 style="margin-bottom: 0.75rem;">{{ detail.ticker }}</h4>
+
+  {# 7-day sparkline #}
+  {% if detail.sparkline_json != '{}' %}
+  <div id="sparkline-chart" style="width: 100%; min-height: 150px;"
+       role="img" aria-label="7-day sparkline for {{ detail.ticker }}"
+       data-chart='{{ detail.sparkline_json }}'></div>
+  <script>
+    (function () {
+      var el = document.getElementById('sparkline-chart');
+      if (el && el.dataset.chart) { renderChart('sparkline-chart', el.dataset.chart); }
+    })();
+  </script>
+  {% endif %}
+
+  {# Feature values table #}
+  {% if detail.features %}
+  <table class="feature-table">
+    <thead>
+      <tr><th>Feature</th><th class="text-right">Value</th></tr>
+    </thead>
+    <tbody>
+      {% for f in detail.features %}
+      <tr>
+        <td>{{ f.name }}</td>
+        <td class="text-right font-mono">{{ "%.4f" | format(f.value) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Claude interpretation #}
+  {% if detail.interpretation %}
+  <div class="interpretation-card">
+    <h4>Interpretation</h4>
+    <p>{{ detail.interpretation.summary }}</p>
+    {% if detail.interpretation.warnings %}
+    <ul class="interpretation-warnings">
+      {% for w in detail.interpretation.warnings %}
+      <li class="badge-negative">{{ w }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if detail.interpretation.suggestions %}
+    <ul class="interpretation-suggestions">
+      {% for s in detail.interpretation.suggestions %}
+      <li>{{ s }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if detail.interpretation.confidence %}
+    <span class="muted" style="font-size: 0.75rem;">
+      Confidence: {{ detail.interpretation.confidence }}
+    </span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# Run interpretation button #}
+  <button class="btn btn-accent"
+          style="margin-top: 0.75rem; width: 100%;"
+          hx-post="/ui/actions/interpret?ticker={{ detail.ticker }}"
+          hx-target="#position-detail"
+          hx-swap="innerHTML"
+          hx-indicator="#spinner">
+    Run Interpretation
+  </button>
+</div>
+{% else %}
+<p class="muted" style="text-align: center; padding: 1rem 0;">
+  Click a position in the heatmap to view details
+</p>
+{% endif %}

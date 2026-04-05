@@ -1,0 +1,283 @@
+{# DCA planner detail — HTMX fragment for a single ticker.
+   Context: ticker, tickers, summary, chart_data, history, limit
+#}
+<div class="dca-layout">
+
+  {# ── LEFT: Settings sidebar (220px) ──────────────────────── #}
+  <div class="dca-sidebar-left">
+    {# Ticker selector #}
+    <div class="card" style="margin-bottom: 0.75rem;">
+      <h4 style="margin-bottom: 0.5rem;">Ticker</h4>
+      <select class="chart-select" style="width: 100%;"
+              hx-get="/ui/portfolio/dca/ticker/{value}"
+              hx-target="#dca-detail"
+              hx-swap="innerHTML"
+              onchange="this.setAttribute('hx-get', '/ui/portfolio/dca/ticker/' + this.value); htmx.trigger(this, 'change');">
+        {% for t in tickers %}
+        <option value="{{ t }}" {% if t == ticker %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# Summary stats #}
+    <div class="card" style="margin-bottom: 0.75rem;">
+      <h4 style="margin-bottom: 0.5rem;">Summary</h4>
+      <table class="feature-table" style="font-size: 0.8rem;">
+        <tbody>
+          <tr>
+            <td class="muted">Invested</td>
+            <td class="text-right font-mono">{{ summary.total_invested | gbp }}</td>
+          </tr>
+          <tr>
+            <td class="muted">Value</td>
+            <td class="text-right font-mono">{{ summary.current_value | gbp }}</td>
+          </tr>
+          <tr>
+            <td class="muted">Return</td>
+            <td class="text-right font-mono {% if summary.total_return_pct >= 0 %}badge-positive{% else %}badge-negative{% endif %}">
+              {{ summary.total_return_pct | pct }}
+            </td>
+          </tr>
+          <tr>
+            <td class="muted">P&amp;L</td>
+            <td class="text-right font-mono {% if summary.total_return_gbp >= 0 %}badge-positive{% else %}badge-negative{% endif %}">
+              {{ summary.total_return_gbp | gbp }}
+            </td>
+          </tr>
+          <tr>
+            <td class="muted">Avg Entry</td>
+            <td class="text-right font-mono">{{ "%.0f" | format(summary.avg_entry_price) }}p</td>
+          </tr>
+          <tr>
+            <td class="muted">Shares</td>
+            <td class="text-right font-mono">{{ summary.total_shares }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    {# Recommended limit #}
+    <div class="card" style="margin-bottom: 0.75rem;">
+      <h4 style="margin-bottom: 0.5rem;">Limit Price</h4>
+      <div style="font-size: 1.4rem; font-weight: 700; font-family: var(--font-mono);">
+        {{ limit.recommended_limit_display }}
+      </div>
+      <p class="muted" style="font-size: 0.7rem; margin-top: 0.25rem;">
+        {{ limit.rationale }}
+      </p>
+      {% if limit.current_vs_limit != 0 %}
+      <span class="font-mono" style="font-size: 0.75rem;
+        {% if limit.current_vs_limit > 0 %}color: var(--negative){% else %}color: var(--positive){% endif %}">
+        Current {{ "%.1f%%" | format(limit.current_vs_limit * 100) }} vs limit
+      </span>
+      {% endif %}
+    </div>
+
+    {# Add purchase form -- always visible #}
+    <div class="card dca-form-card">
+      <h4 class="dca-form-title">Add Purchase</h4>
+
+      <form class="dca-form"
+            hx-post="/ui/portfolio/dca/purchase"
+            hx-target="#purchase-tbody"
+            hx-swap="beforeend"
+            hx-on::after-request="if(event.detail.successful) this.reset()">
+        <input type="hidden" name="ticker" value="{{ ticker }}">
+
+        <div class="dca-field">
+          <label for="dca-date">Date</label>
+          <input type="date" id="dca-date" name="date" required
+                 class="chart-select">
+        </div>
+
+        <div class="dca-field">
+          <label for="dca-price">Price (pence)</label>
+          <input type="number" id="dca-price" name="price" step="0.01" min="0" required
+                 class="chart-select" placeholder="e.g. 1383">
+        </div>
+
+        <div class="dca-field">
+          <label for="dca-amount">Amount (GBP)</label>
+          <input type="number" id="dca-amount" name="amount_gbp" step="0.01" min="0" required
+                 class="chart-select" placeholder="e.g. 250">
+        </div>
+
+        <div class="dca-field">
+          <label for="dca-note">Note</label>
+          <input type="text" id="dca-note" name="note" placeholder="Optional"
+                 class="chart-select">
+        </div>
+
+        <button type="submit" class="btn btn-sm btn-accent dca-submit">
+          Save Purchase
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {# ── CENTRE: DCA chart ──────────────────────────────────── #}
+  <div class="dca-centre">
+    <div class="card chart-main-panel">
+      <h4 class="chart-panel-title">{{ ticker }} — DCA Chart</h4>
+      <svg class="chart-svg" viewBox="0 0 900 230" preserveAspectRatio="none">
+        {% if chart_data.svg_price_line %}
+        {# Price line #}
+        <polyline points="{{ chart_data.svg_price_line }}"
+                  fill="none" stroke="var(--positive)" stroke-width="1.5"
+                  stroke-linejoin="round" stroke-linecap="round" />
+
+        {# Average cost basis line #}
+        {% if chart_data.svg_avg_line_y is not none %}
+        <line x1="40" y1="{{ chart_data.svg_avg_line_y }}"
+              x2="860" y2="{{ chart_data.svg_avg_line_y }}"
+              stroke="var(--accent)" stroke-width="1"
+              stroke-dasharray="6,3" opacity="0.7" />
+        <text x="865" y="{{ chart_data.svg_avg_line_y }}"
+              fill="var(--accent)" font-size="9" dominant-baseline="middle">
+          AVG {{ "%.0f" | format(summary.avg_entry_price) }}p
+        </text>
+        {% endif %}
+
+        {# Purchase dots #}
+        {% for dot in chart_data.purchase_dots %}
+        <circle cx="{{ dot.x }}" cy="{{ dot.y }}" r="5"
+                fill="{{ dot.colour }}" stroke="var(--bg)" stroke-width="1.5">
+          <title>{{ dot.date }} — {{ dot.price }}p ({{ dot.quality }})</title>
+        </circle>
+        {% endfor %}
+
+        {% else %}
+        <text x="450" y="115" text-anchor="middle" fill="var(--muted)" font-size="13">
+          No price data available for {{ ticker }}
+        </text>
+        {% endif %}
+      </svg>
+
+      {# Quality legend #}
+      <div style="display: flex; gap: 1rem; justify-content: center; padding: 0.5rem 0; font-size: 0.75rem;">
+        <span><span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #22c55e;"></span> Best (RSI &lt; 35)</span>
+        <span><span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: rgba(34,197,94,0.6);"></span> Good (35-45)</span>
+        <span><span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #f59e0b;"></span> Neutral (45-60)</span>
+        <span><span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ef4444;"></span> Late (&gt; 60)</span>
+      </div>
+    </div>
+
+    {# ── Purchase history table ──────────────────────────── #}
+    <div class="card" style="margin-top: 0.75rem;">
+      <h4 style="margin-bottom: 0.5rem;">Purchase History</h4>
+      <table class="feature-table" style="width: 100%; font-size: 0.8rem;">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th class="text-right">Price (p)</th>
+            <th class="text-right">Amount</th>
+            <th class="text-right">Shares</th>
+            <th class="text-right">Value</th>
+            <th class="text-right">Return</th>
+            <th>Quality</th>
+            <th>Note</th>
+          </tr>
+        </thead>
+        <tbody id="purchase-tbody">
+          {% for p in history %}
+          <tr>
+            <td class="font-mono">{{ p.date }}</td>
+            <td class="text-right font-mono">{{ "%.0f" | format(p.price) }}</td>
+            <td class="text-right font-mono">{{ p.amount_gbp | gbp }}</td>
+            <td class="text-right font-mono">{{ p.shares }}</td>
+            <td class="text-right font-mono">{{ p.current_value | gbp }}</td>
+            <td class="text-right font-mono {% if p.return_pct >= 0 %}badge-positive{% else %}badge-negative{% endif %}">
+              {{ p.return_pct | pct }}
+            </td>
+            <td>
+              <span class="ticker-chip" style="background: {{ {'best': '#22c55e', 'good': 'rgba(34,197,94,0.6)', 'neutral': '#f59e0b', 'late': '#ef4444'}.get(p.entry_quality, '#6b7280') }}; color: #fff; font-size: 0.7rem;">
+                {{ p.entry_quality }}
+              </span>
+            </td>
+            <td class="muted" style="font-size: 0.7rem;">{{ p.note or '' }}</td>
+          </tr>
+          {% endfor %}
+          {% if not history %}
+          <tr>
+            <td colspan="8" class="muted" style="text-align: center;">No purchases recorded yet</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── RIGHT: Best/worst entries sidebar (280px) ──────────── #}
+  <div class="dca-sidebar-right">
+    {# Best entry #}
+    {% if summary.best_entry %}
+    <div class="card" style="margin-bottom: 0.75rem;">
+      <h4 style="margin-bottom: 0.5rem; color: var(--positive);">Best Entry</h4>
+      <table class="feature-table" style="font-size: 0.8rem;">
+        <tbody>
+          <tr>
+            <td class="muted">Date</td>
+            <td class="text-right font-mono">{{ summary.best_entry.date }}</td>
+          </tr>
+          <tr>
+            <td class="muted">Price</td>
+            <td class="text-right font-mono">{{ "%.0f" | format(summary.best_entry.price) }}p</td>
+          </tr>
+          <tr>
+            <td class="muted">Return</td>
+            <td class="text-right font-mono badge-positive">{{ summary.best_entry.return_pct | pct }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {# Worst entry #}
+    {% if summary.worst_entry %}
+    <div class="card" style="margin-bottom: 0.75rem;">
+      <h4 style="margin-bottom: 0.5rem; color: var(--negative);">Worst Entry</h4>
+      <table class="feature-table" style="font-size: 0.8rem;">
+        <tbody>
+          <tr>
+            <td class="muted">Date</td>
+            <td class="text-right font-mono">{{ summary.worst_entry.date }}</td>
+          </tr>
+          <tr>
+            <td class="muted">Price</td>
+            <td class="text-right font-mono">{{ "%.0f" | format(summary.worst_entry.price) }}p</td>
+          </tr>
+          <tr>
+            <td class="muted">Return</td>
+            <td class="text-right font-mono badge-negative">{{ summary.worst_entry.return_pct | pct }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {# Entry quality breakdown #}
+    {% if history %}
+    <div class="card">
+      <h4 style="margin-bottom: 0.5rem;">Entry Quality</h4>
+      {% set quality_counts = {} %}
+      {% for p in history %}
+        {% if p.entry_quality in quality_counts %}
+          {% set _ = quality_counts.update({p.entry_quality: quality_counts[p.entry_quality] + 1}) %}
+        {% else %}
+          {% set _ = quality_counts.update({p.entry_quality: 1}) %}
+        {% endif %}
+      {% endfor %}
+      {% for label, colour in [('best', '#22c55e'), ('good', 'rgba(34,197,94,0.6)'), ('neutral', '#f59e0b'), ('late', '#ef4444')] %}
+      {% if label in quality_counts %}
+      <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; font-size: 0.8rem;">
+        <span style="width: 10px; height: 10px; border-radius: 50%; background: {{ colour }};"></span>
+        <span>{{ label | capitalize }}</span>
+        <span class="font-mono" style="margin-left: auto;">{{ quality_counts[label] }}</span>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>

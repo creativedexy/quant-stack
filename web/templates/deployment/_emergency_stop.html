@@ -1,0 +1,43 @@
+{#- Emergency stop button -- included on every deployment page. -#}
+<div x-data="{ confirmHalt: false }" style="position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 999;">
+  <button
+    x-show="!confirmHalt"
+    x-on:click="confirmHalt = true"
+    class="btn"
+    style="background: var(--red); color: #fff; font-weight: 700; padding: 0.75rem 1.5rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"
+  >
+    EMERGENCY STOP
+  </button>
+
+  <div
+    x-show="confirmHalt"
+    x-cloak
+    style="background: var(--card); border: 2px solid var(--red); border-radius: 8px; padding: 1rem; min-width: 260px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);"
+  >
+    <p style="margin: 0 0 0.75rem; font-weight: 600; color: var(--red);">
+      Cancel ALL pending orders?
+    </p>
+    <p style="margin: 0 0 0.75rem; font-size: 0.85rem; color: var(--text-muted);">
+      This will immediately reject all pending and approved orders.
+    </p>
+    <div style="display: flex; gap: 0.5rem;">
+      <button
+        hx-post="/ui/execute/deployment/halt"
+        hx-swap="innerHTML"
+        hx-target="#deployment-content"
+        x-on:click="confirmHalt = false"
+        class="btn"
+        style="background: var(--red); color: #fff; font-weight: 600; flex: 1; padding: 0.5rem;"
+      >
+        CONFIRM HALT
+      </button>
+      <button
+        x-on:click="confirmHalt = false"
+        class="btn"
+        style="background: var(--card-alt); flex: 1; padding: 0.5rem;"
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>

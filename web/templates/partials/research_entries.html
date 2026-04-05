@@ -1,0 +1,19 @@
+{# Research entry list fragment -- loaded via HTMX #}
+{% if entries %}
+<ul class="log-entry-list">
+  {% for entry in entries %}
+  <li>
+    <button class="log-entry"
+            hx-get="/ui/partials/research-entry?id={{ entry.id }}"
+            hx-target="#research-detail"
+            hx-swap="innerHTML">
+      <span class="log-entry-date muted">{{ entry.date }}</span>
+      <span class="log-entry-notebook">{{ entry.notebook }}</span>
+      <span class="log-entry-summary">{{ entry.summary }}</span>
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="skeleton-text">No research entries found</p>
+{% endif %}

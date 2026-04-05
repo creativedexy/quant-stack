@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Execution | Quant Stack{% endblock %}
+
+{% block content %}
+  <h1>Execution</h1>
+
+  {# Trading mode banner #}
+  {% if is_live %}
+    <div class="trading-banner trading-banner-live">
+      LIVE TRADING ACTIVE -- real orders will be submitted
+    </div>
+  {% else %}
+    <div class="trading-banner trading-banner-paper">
+      PAPER TRADING -- no real orders will be placed
+    </div>
+  {% endif %}
+
+  {# Account status bar #}
+  <div class="metrics-bar" style="margin-top: 1rem;">
+    <div class="card">
+      <div class="metric-label">Mode</div>
+      <div class="metric-value font-mono" style="font-size: 1.125rem;">
+        {{ broker_status.get('mode', 'paper') | upper }}
+      </div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Account Value</div>
+      <div class="metric-value font-mono" style="font-size: 1.125rem;">
+        {{ broker_status.get('account_value', 0) | gbp }}
+      </div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Cash</div>
+      <div class="metric-value font-mono" style="font-size: 1.125rem;">
+        {{ broker_status.get('cash', 0) | gbp }}
+      </div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Invested</div>
+      <div class="metric-value font-mono" style="font-size: 1.125rem;">
+        {{ broker_status.get('invested', 0) | gbp }}
+      </div>
+    </div>
+    <div class="card">
+      <div class="metric-label">Positions</div>
+      <div class="metric-value font-mono" style="font-size: 1.125rem;">
+        {{ broker_status.get('positions_count', 0) }}
+      </div>
+    </div>
+  </div>
+
+  {# Open orders #}
+  <div class="card" style="margin-bottom: 1rem;">
+    <h3>Open Orders</h3>
+    <div id="open-orders"
+         hx-get="/ui/partials/open-orders"
+         hx-trigger="every 10s"
+         hx-swap="innerHTML">
+      {% include "partials/open_orders.html" %}
+    </div>
+  </div>
+
+  {# Order history #}
+  <div class="card">
+    <h3>Order History</h3>
+    <div id="order-history"
+         hx-get="/ui/partials/order-history"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <p class="skeleton-text">Loading order history...</p>
+    </div>
+  </div>
+{% endblock %}

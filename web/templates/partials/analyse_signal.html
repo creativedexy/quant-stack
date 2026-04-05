@@ -1,0 +1,107 @@
+{# Signal zone fragment -- swapped via HTMX when ticker changes #}
+
+{# Signal hero -- confidence top-right, direction chip left #}
+<div class="card" style="padding:1.25rem;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+    {# Direction chip #}
+    <div class="chip {% if direction == 'Looking Good' %}chip-green{% elif direction == 'Be Careful' %}chip-red{% else %}chip-amber{% endif %}"
+         style="font-size:0.8rem;padding:0.3rem 0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.03em;">
+      {% if direction == 'Looking Good' %}&#9650;{% elif direction == 'Be Careful' %}&#9660;{% else %}&#9644;{% endif %}
+      {{ direction }}
+    </div>
+    {# Confidence block #}
+    <div style="text-align:right;">
+      <div class="text-muted" style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;">Confidence</div>
+      <div class="font-mono {% if confidence > 0.65 %}text-green{% elif confidence < 0.35 %}text-red{% else %}text-amber{% endif %}"
+           style="font-size:2.5rem;font-weight:700;line-height:1;">
+        {{ "%.0f" | format(confidence * 100) }}%
+      </div>
+    </div>
+  </div>
+  {# Confidence bar #}
+  <div style="height:6px;background:var(--border);border-radius:3px;margin-top:0.75rem;overflow:hidden;">
+    <div style="height:100%;width:{{ (confidence * 100) | int }}%;border-radius:3px;background:{% if confidence > 0.65 %}var(--green){% elif confidence < 0.35 %}var(--red){% else %}var(--amber){% endif %};"></div>
+  </div>
+</div>
+
+{# Plain English summary #}
+<div class="card" style="padding:1rem;">
+  <div style="font-size:0.9rem;line-height:1.7;font-weight:400;">
+    {{ summary | safe }}
+  </div>
+</div>
+
+{# AI Deep Dive button -- full width amber #}
+<button class="ai-btn" style="width:100%;padding:0.75rem 1rem;font-size:0.9rem;display:flex;align-items:center;justify-content:center;gap:0.5rem;"
+        hx-post="/ui/analyse/ai-dive?ticker={{ ticker }}"
+        hx-target="#ai-dive-result"
+        hx-swap="innerHTML"
+        hx-indicator="#ai-spinner">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="3" y="3" width="18" height="18" rx="2"/>
+    <path d="M9 9h.01M15 9h.01M9 15h6"/>
+  </svg>
+  Get AI Deep Dive
+</button>
+<span id="ai-spinner" class="spinner htmx-indicator"></span>
+<div id="ai-dive-result"></div>
+
+{# What's Driving This Signal #}
+<div class="card" style="padding:1rem;">
+  <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.75rem;font-weight:600;">
+    What's Driving This Signal
+  </div>
+  {% for driver in drivers %}
+  <div style="margin-bottom:0.75rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem;">
+      <span style="font-size:0.85rem;font-weight:500;">{{ driver.name }}</span>
+      <div style="display:flex;align-items:center;gap:0.5rem;flex:1;margin:0 0.75rem;">
+        <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden;">
+          <div style="height:100%;width:{{ driver.bar_width }}%;border-radius:2px;background:{% if driver.strength == 'Weak' %}var(--red){% elif driver.strength == 'Mild' %}var(--amber){% else %}var(--green){% endif %};"></div>
+        </div>
+      </div>
+      <span class="font-mono" style="font-size:0.7rem;font-weight:500;min-width:60px;text-align:right;color:{% if driver.strength == 'Strong' %}var(--green){% elif driver.strength == 'Weak' %}var(--red){% elif driver.strength == 'Moderate' %}var(--green){% else %}var(--t2){% endif %};">{{ driver.strength }}</span>
+    </div>
+    <div class="text-muted" style="font-size:0.7rem;line-height:1.4;">{{ driver.explanation }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+{# What You Can Do -- with icon circles and chevrons #}
+<div class="card" style="padding:1rem;">
+  <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.75rem;font-weight:600;">
+    What You Can Do
+  </div>
+  <div style="display:flex;flex-direction:column;gap:0.5rem;">
+    <a href="/ui/watchlist" class="card" style="padding:0.6rem 0.8rem;text-decoration:none;color:inherit;display:flex;align-items:center;gap:0.75rem;">
+      <div style="width:32px;height:32px;border-radius:8px;background:var(--cyan-dim);color:var(--cyan);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:0.8rem;">Add to Watchlist</div>
+        <div class="text-muted" style="font-size:0.7rem;">Track this ticker on your dashboard</div>
+      </div>
+      <span class="text-muted" style="font-size:0.8rem;">&#8250;</span>
+    </a>
+    <a href="/ui/portfolio" class="card" style="padding:0.6rem 0.8rem;text-decoration:none;color:inherit;display:flex;align-items:center;gap:0.75rem;">
+      <div style="width:32px;height:32px;border-radius:8px;background:var(--green-dim);color:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:0.8rem;">View in Portfolio</div>
+        <div class="text-muted" style="font-size:0.7rem;">See how this fits with your current holdings</div>
+      </div>
+      <span class="text-muted" style="font-size:0.8rem;">&#8250;</span>
+    </a>
+    <a href="/ui/execution" class="card" style="padding:0.6rem 0.8rem;text-decoration:none;color:inherit;display:flex;align-items:center;gap:0.75rem;">
+      <div style="width:32px;height:32px;border-radius:8px;background:var(--amber-dim);color:var(--amber);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:0.8rem;">Set Price Alert</div>
+        <div class="text-muted" style="font-size:0.7rem;">Get notified when the price hits a target</div>
+      </div>
+      <span class="text-muted" style="font-size:0.8rem;">&#8250;</span>
+    </a>
+  </div>
+</div>

@@ -1,0 +1,92 @@
+{# Strategy detail — HTMX fragment.
+   Loaded when a strategy is selected in the strategy page.
+#}
+{% if detail %}
+<div class="strategy-detail-content">
+  <h3 style="margin-bottom: 1rem;">
+    {{ detail.strategy | replace("_", " ") | title }}
+  </h3>
+
+  {# Summary card #}
+  <div class="strategy-summary-grid">
+    <div class="summary-stat">
+      <span class="metric-label">Sharpe</span>
+      <span class="metric-value font-mono" style="font-size: 1.25rem;">
+        {{ detail.summary.sharpe }}
+      </span>
+    </div>
+    <div class="summary-stat">
+      <span class="metric-label">CAGR</span>
+      <span class="metric-value font-mono" style="font-size: 1.25rem;">
+        {{ detail.summary.cagr }}
+      </span>
+    </div>
+    <div class="summary-stat">
+      <span class="metric-label">Max Drawdown</span>
+      <span class="metric-value font-mono badge-negative" style="font-size: 1.25rem;">
+        {{ detail.summary.max_drawdown }}
+      </span>
+    </div>
+    <div class="summary-stat">
+      <span class="metric-label">Win Rate</span>
+      <span class="metric-value font-mono" style="font-size: 1.25rem;">
+        {{ detail.summary.win_rate }}
+      </span>
+    </div>
+  </div>
+
+  {# Mini equity curve #}
+  {% if detail.equity_json != '{}' %}
+  <div style="margin: 1rem 0;">
+    <h4 style="margin-bottom: 0.5rem;">Equity Curve</h4>
+    <div id="strategy-equity-chart" style="width: 100%; min-height: 200px;"
+         data-chart='{{ detail.equity_json }}'></div>
+    <script>
+      (function () {
+        var el = document.getElementById('strategy-equity-chart');
+        if (el && el.dataset.chart) { renderChart('strategy-equity-chart', el.dataset.chart); }
+      })();
+    </script>
+  </div>
+  {% endif %}
+
+  {# Signal history table #}
+  {% if detail.signals %}
+  <div style="margin-top: 1rem;">
+    <h4 style="margin-bottom: 0.5rem;">Signal History</h4>
+    <table class="feature-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Ticker</th>
+          <th>Direction</th>
+          <th class="text-right">Confidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sig in detail.signals %}
+        <tr>
+          <td class="font-mono" style="font-size: 0.8rem;">{{ sig.date }}</td>
+          <td><span class="ticker-chip">{{ sig.ticker }}</span></td>
+          <td>
+            <span class="signal-badge signal-{{ sig.direction | lower }}">
+              {{ sig.direction | upper }}
+            </span>
+          </td>
+          <td class="text-right font-mono">{{ "%.0f" | format(sig.confidence * 100) }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted" style="text-align: center; padding: 1rem 0;">
+    No signal history for this strategy
+  </p>
+  {% endif %}
+</div>
+{% else %}
+<p class="muted" style="text-align: center; padding: 3rem 0;">
+  Select a strategy from the list to view details
+</p>
+{% endif %}

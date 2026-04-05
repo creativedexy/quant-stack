@@ -1,0 +1,54 @@
+{# Order history fragment -- loaded via HTMX with pagination #}
+{% if orders %}
+<table class="feature-table">
+  <thead>
+    <tr>
+      <th>Ticker</th>
+      <th>Side</th>
+      <th class="text-right">Qty</th>
+      <th class="text-right">Price</th>
+      <th>Status</th>
+      <th class="muted">Time</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for order in orders %}
+    <tr>
+      <td><span class="ticker-chip">{{ order.ticker }}</span></td>
+      <td>
+        <span class="{{ 'badge-positive' if order.side == 'BUY' else 'badge-negative' }}">
+          {{ order.side }}
+        </span>
+      </td>
+      <td class="text-right font-mono">{{ order.qty }}</td>
+      <td class="text-right font-mono">{{ order.price | gbp }}</td>
+      <td>{{ order.status }}</td>
+      <td class="muted">{{ order.time }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page > 1 %}
+  <button class="sort-btn"
+          hx-get="/ui/partials/order-history?page={{ page - 1 }}"
+          hx-target="#order-history"
+          hx-swap="innerHTML">&laquo; Prev</button>
+  {% endif %}
+  <span class="muted font-mono" style="font-size: 0.8rem;">
+    Page {{ page }} of {{ total_pages }}
+  </span>
+  {% if page < total_pages %}
+  <button class="sort-btn"
+          hx-get="/ui/partials/order-history?page={{ page + 1 }}"
+          hx-target="#order-history"
+          hx-swap="innerHTML">Next &raquo;</button>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<p class="skeleton-text">No order history available</p>
+{% endif %}

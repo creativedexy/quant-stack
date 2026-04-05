@@ -1,0 +1,44 @@
+<div class="card chart-sub-panel">
+  <h4 class="chart-panel-title">MACD (12, 26, 9)</h4>
+  <svg class="chart-svg chart-svg-sm" viewBox="0 0 900 100" preserveAspectRatio="none">
+    <!-- Zero line -->
+    <line x1="40" y1="50" x2="860" y2="50"
+          stroke="var(--muted-line)" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.4" />
+
+    {% if macd_data.macd_histogram %}
+    <!-- Histogram bars -->
+    {% set bars = to_svg_bars(macd_data.macd_histogram, macd_data.histogram_colours, 900, 100) %}
+    {% for bar in bars %}
+    <rect x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.w }}" height="{{ bar.h }}"
+          fill="{{ 'var(--positive)' if bar.colour == 'green' else 'var(--negative)' }}"
+          opacity="0.5" />
+    {% endfor %}
+    {% endif %}
+
+    {% if macd_data.macd_line %}
+    <!-- MACD line -->
+    {% set macd_pts = to_svg_points(macd_data.dates, macd_data.macd_line, 900, 100) %}
+    {% if macd_pts %}
+    <polyline points="{{ macd_pts }}"
+              fill="none" stroke="var(--accent)" stroke-width="1.2"
+              stroke-linejoin="round" stroke-linecap="round" />
+    {% endif %}
+    {% endif %}
+
+    {% if macd_data.macd_signal %}
+    <!-- Signal line -->
+    {% set sig_pts = to_svg_points(macd_data.dates, macd_data.macd_signal, 900, 100) %}
+    {% if sig_pts %}
+    <polyline points="{{ sig_pts }}"
+              fill="none" stroke="var(--warning)" stroke-width="1"
+              stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="3,2" />
+    {% endif %}
+    {% endif %}
+
+    {% if not macd_data.macd_line %}
+    <text x="450" y="55" text-anchor="middle" fill="var(--muted)" font-size="12">
+      No MACD data available
+    </text>
+    {% endif %}
+  </svg>
+</div>

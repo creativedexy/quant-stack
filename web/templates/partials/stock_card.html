@@ -1,0 +1,99 @@
+{# Stock card partial -- rendered inside a wrapper div with HTMX swap.
+   Expects: card (dict).
+#}
+<div hx-get="/ui/watchlist/card/{{ card.ticker }}"
+     hx-trigger="every 30s"
+     hx-swap="outerHTML">
+<div class="stock-card">
+  <!-- Header row -->
+  <div class="stock-card-header">
+    <div class="stock-card-logo" style="background-color:{{ card.logo_colour }};">
+      {{ card.ticker[:1] }}
+    </div>
+    <div class="stock-card-title">
+      <span class="stock-card-name">{{ card.company_name }}</span>
+      <span class="stock-card-ticker">{{ card.ticker }} &middot; {{ card.exchange }}</span>
+    </div>
+    <div class="stock-card-price-block">
+      <span class="stock-card-price">
+        {%- if card.ticker.endswith('.L') -%}
+          {{ "%.1f" | format(card.current) }}p
+        {%- elif card.exchange == 'Crypto' -%}
+          ${{ "%.2f" | format(card.current) }}
+        {%- else -%}
+          ${{ "%.2f" | format(card.current) }}
+        {%- endif -%}
+      </span>
+      <span class="stock-card-change change-{{ card.direction }}">
+        {% if card.direction == 'up' %}
+        <svg width="10" height="10" viewBox="0 0 10 10"><polyline points="2,7 5,3 8,7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        {% else %}
+        <svg width="10" height="10" viewBox="0 0 10 10"><polyline points="2,3 5,7 8,3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        {% endif %}
+        {{ "%+.2f" | format(card.change_pct) }}%
+      </span>
+    </div>
+  </div>
+
+  <!-- Body row: chart + metrics -->
+  <div class="stock-card-body">
+    <!-- Intraday SVG chart area -->
+    <div>
+      <div class="stock-card-chart"
+           data-prices="{{ card.prices | join(',') }}"
+           data-prev="{{ card.prev_close }}"
+           data-direction="{{ card.direction }}"
+           data-ticker="{{ card.ticker }}">
+        <div class="crosshair-v"></div>
+        <div class="crosshair-h"></div>
+        <svg class="chart-svg" viewBox="0 0 400 120" preserveAspectRatio="none"></svg>
+        <div class="hover-tip">
+          <div class="hover-price"></div>
+          <div class="hover-date"></div>
+        </div>
+      </div>
+      <div class="chart-x-axis">
+        <span>4 AM</span><span>7 AM</span><span>10 AM</span><span>1 PM</span><span>4 PM</span><span>7 PM</span>
+      </div>
+    </div>
+
+    <!-- Metrics panel -->
+    <div class="stock-card-metrics">
+      <div class="stock-card-metric">
+        <span class="metric-label">Volume</span>
+        <span class="metric-value">{{ card.volume }}</span>
+      </div>
+      <div class="stock-card-metric">
+        <span class="metric-label">Market Cap</span>
+        <span class="metric-value">{{ card.market_cap }}</span>
+      </div>
+      <div class="stock-card-metric">
+        <span class="metric-label">P/E Ratio</span>
+        <span class="metric-value">{{ card.pe_ratio }}</span>
+      </div>
+      <div class="stock-card-metric">
+        <span class="metric-label">Div Yield</span>
+        <span class="metric-value">{{ card.div_yield }}</span>
+      </div>
+      <div class="stock-card-metric">
+        <span class="metric-label">Profit Margin</span>
+        <span class="metric-value" style="color:var(--{{ 'green' if card.is_positive_margin else 'red' }});">{{ card.profit_margin }}</span>
+      </div>
+      <div class="stock-card-metric">
+        <span class="metric-label">Operating Margin</span>
+        <span class="metric-value" style="color:var(--{{ 'green' if card.is_positive_op_margin else 'red' }});">{{ card.operating_margin }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary row -->
+  <div class="stock-card-summary">
+    {{ card.summary }}
+    {% if card.signal_direction and card.signal_direction != 'NEUTRAL' %}
+    <span class="signal-badge signal-{{ card.signal_direction | lower }}" style="margin-top:0.375rem;">
+      {{ card.signal_direction }} {{ "%.0f" | format(card.signal_confidence * 100) }}%
+    </span>
+    {% endif %}
+  </div>
+</div>
+</div>

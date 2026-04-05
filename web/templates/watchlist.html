@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Watchlist — Quant Stack{% endblock %}
+
+{% block head %}
+<script src="/static/js/chart_hover.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="watchlist-layout">
+
+  <!-- Left column: stock cards + ask bar -->
+  <div class="watchlist-cards-col">
+    <h2>Watchlist</h2>
+    <div class="cards-scroll-area">
+      <div id="watchlist-cards">
+        {% for group in groups %}
+        <h3 class="watchlist-group-header">{{ group.name }}</h3>
+        <div class="watchlist-cards-grid">
+          {% for ticker in group.tickers %}
+          <div id="card-{{ ticker | replace('.', '-') | replace('$', '') }}"
+               hx-get="/ui/watchlist/card/{{ ticker }}"
+               hx-trigger="load"
+               hx-swap="outerHTML">
+            {# Skeleton shown until HTMX replaces it #}
+            <div class="stock-card stock-card--skeleton">
+              <div class="stock-card-header">
+                <div class="stock-card-logo" style="background-color:#374151;">{{ ticker[:1] }}</div>
+                <div class="stock-card-title">
+                  <span class="stock-card-ticker">{{ ticker }}</span>
+                  <span class="stock-card-name skeleton-text">Loading&hellip;</span>
+                </div>
+              </div>
+              <div class="stock-card-body">
+                <div class="skeleton-bar"></div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <!-- Ask bar: fixed to bottom of cards column -->
+    <div class="ask-bar-wrap">
+      <div class="ask-bar" x-data>
+        <div class="ask-plus">+</div>
+        <input
+          class="ask-input"
+          placeholder="Ask anything about your FTSE watchlist..."
+          id="askInput"
+          hx-post="/ui/ask"
+          hx-trigger="keydown[key=='Enter']"
+          hx-target="#ask-response"
+          hx-swap="innerHTML"
+          name="query"
+        >
+        <button
+          class="ask-send"
+          hx-post="/ui/ask"
+          hx-include="#askInput"
+          hx-target="#ask-response"
+          hx-swap="innerHTML"
+        >&#8629;</button>
+      </div>
+      <div id="ask-response" style="
+        padding: 0 14px 0;
+        font-size:12px;
+        color: #8a8a8a;
+        font-family: 'Inter', sans-serif;
+        line-height: 1.6;
+        max-height: 80px;
+        overflow: hidden;
+      "></div>
+    </div>
+  </div>
+
+  <!-- Right column: sidebar -->
+  <div class="watchlist-sidebar-col">
+
+    <!-- FTSE 100 breadth bar -->
+    <div class="card">
+      <h4 class="muted" style="margin-bottom:0.75rem;">Market Breadth</h4>
+      <div class="breadth-bar-container">
+        <div class="breadth-bar">
+          <div class="breadth-bar-up" style="width:{{ breadth_pct | default(55) }}%;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;margin-top:0.25rem;">
+          <span class="badge-positive">Advancing</span>
+          <span class="badge-negative">Declining</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active signals -->
+    <div class="card">
+      <h4 class="muted" style="margin-bottom:0.75rem;">Active Signals</h4>
+      {% if active_signals %}
+      <table class="feature-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Direction</th>
+            <th class="text-right">Confidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sig in active_signals %}
+          <tr>
+            <td><span class="ticker-chip">{{ sig.ticker }}</span></td>
+            <td>
+              <span class="signal-badge signal-{{ sig.direction | lower }}">
+                {{ sig.direction }}
+              </span>
+            </td>
+            <td class="text-right font-mono">{{ "%.0f" | format(sig.confidence * 100) }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="font-size:0.8rem;">No active signals.</p>
+      {% endif %}
+    </div>
+
+    <!-- FX & Commodities -->
+    <div class="card">
+      <h4 class="muted" style="margin-bottom:0.75rem;">FX &amp; Commodities</h4>
+      <div class="fx-commodities-list">
+        {% for item in fx_commodities %}
+        <div class="fx-row">
+          <span class="fx-name">{{ item.name }}</span>
+          <span class="font-mono">{{ item.value }}</span>
+          <span class="badge-{{ 'positive' if item.direction == 'up' else 'negative' }} font-mono"
+                style="font-size:0.75rem;">
+            {{ item.change }}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // Pass chart config to JS
+  window.__chartCfg = {{ chart_cfg_json | safe }};
+</script>
+{% endblock %}

@@ -1,0 +1,60 @@
+{# Monte Carlo fan chart overlay — inner SVG content injected via HTMX innerHTML. #}
+{% if mc_data.svg_points.p5 and mc_data.svg_points.p95 %}
+
+{# Fan fill between P5 and P95 #}
+<polygon
+  points="{{ mc_data.svg_points.p95 }} {{ mc_data.svg_points.p5.split(' ') | reverse | join(' ') }}"
+  fill="#7c3aed" opacity="0.10" />
+
+{# P95 dashed line #}
+<polyline points="{{ mc_data.svg_points.p95 }}"
+          fill="none" stroke="#7c3aed" stroke-width="1"
+          stroke-dasharray="4,3" opacity="0.6" />
+
+{# P50 solid median line #}
+<polyline points="{{ mc_data.svg_points.p50 }}"
+          fill="none" stroke="#7c3aed" stroke-width="2"
+          stroke-linejoin="round" stroke-linecap="round" opacity="0.9" />
+
+{# P5 dashed line #}
+<polyline points="{{ mc_data.svg_points.p5 }}"
+          fill="none" stroke="#7c3aed" stroke-width="0.5"
+          stroke-dasharray="4,3" opacity="0.5" />
+
+{# TODAY vertical divider #}
+<line x1="40" y1="5" x2="40" y2="215"
+      stroke="#7c3aed" stroke-width="1" stroke-dasharray="3,3" opacity="0.7" />
+<text x="42" y="14" fill="#7c3aed" font-size="9" font-weight="600"
+      opacity="0.8">TODAY</text>
+
+{# End labels — position at the last SVG point #}
+{% set p95_pts = mc_data.svg_points.p95.split(' ') %}
+{% set p50_pts = mc_data.svg_points.p50.split(' ') %}
+{% set p5_pts = mc_data.svg_points.p5.split(' ') %}
+
+{% if p95_pts | length > 0 %}
+{% set last_p95 = p95_pts[-1].split(',') %}
+<text x="{{ last_p95[0] }}" y="{{ (last_p95[1] | float) - 4 }}"
+      fill="#7c3aed" font-size="8" font-weight="600" opacity="0.8"
+      text-anchor="end">P95</text>
+{% endif %}
+
+{% if p50_pts | length > 0 %}
+{% set last_p50 = p50_pts[-1].split(',') %}
+<text x="{{ last_p50[0] }}" y="{{ (last_p50[1] | float) - 4 }}"
+      fill="#7c3aed" font-size="8" font-weight="700" opacity="0.9"
+      text-anchor="end">P50 (median)</text>
+{% endif %}
+
+{% if p5_pts | length > 0 %}
+{% set last_p5 = p5_pts[-1].split(',') %}
+<text x="{{ last_p5[0] }}" y="{{ (last_p5[1] | float) + 10 }}"
+      fill="#7c3aed" font-size="8" font-weight="600" opacity="0.7"
+      text-anchor="end">P05</text>
+{% endif %}
+
+{% else %}
+<text x="450" y="110" text-anchor="middle" fill="var(--muted)" font-size="12">
+  Insufficient data for Monte Carlo projection
+</text>
+{% endif %}

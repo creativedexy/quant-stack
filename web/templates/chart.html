@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Chart — {{ ticker }} — Quant Stack{% endblock %}
+
+{% block content %}
+<div class="chart-layout" x-data="{
+  showRsi: false, showMacd: false, showMl: false, showForensic: false, showMc: false, logScale: false,
+  init() {
+    this.showRsi = JSON.parse(localStorage.getItem('chart_showRsi') || 'false');
+    this.showMacd = JSON.parse(localStorage.getItem('chart_showMacd') || 'false');
+    this.showMl = JSON.parse(localStorage.getItem('chart_showMl') || 'false');
+    this.showForensic = JSON.parse(localStorage.getItem('chart_showForensic') || 'false');
+    this.showMc = JSON.parse(localStorage.getItem('chart_showMc') || 'false');
+    this.logScale = JSON.parse(localStorage.getItem('chart_logScale') || 'false');
+    this.$watch('showRsi', v => localStorage.setItem('chart_showRsi', v));
+    this.$watch('showMacd', v => localStorage.setItem('chart_showMacd', v));
+    this.$watch('showMl', v => localStorage.setItem('chart_showMl', v));
+    this.$watch('showForensic', v => localStorage.setItem('chart_showForensic', v));
+    this.$watch('showMc', v => localStorage.setItem('chart_showMc', v));
+    this.$watch('logScale', v => localStorage.setItem('chart_logScale', v));
+  }
+}">
+
+  <!-- Toolbar -->
+  <div class="chart-toolbar">
+    <div class="chart-toolbar-left">
+      <label class="chart-toolbar-label">Ticker</label>
+      <select class="chart-select"
+              aria-label="Select ticker"
+              onchange="window.location.href='/ui/chart?ticker='+this.value+'&period={{ period }}'">
+        {% for t in tickers %}
+        <option value="{{ t }}" {% if t == ticker %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+
+      <div class="chart-period-group">
+        {% for p in periods %}
+        <a class="btn btn-sm {% if p == period %}btn-accent{% endif %}"
+           href="/ui/chart?ticker={{ ticker }}&period={{ p }}">{{ p }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="chart-toolbar-right">
+      <button class="btn btn-sm"
+              :class="{ 'btn-accent': showRsi }"
+              x-on:click="showRsi = !showRsi">RSI</button>
+      <button class="btn btn-sm"
+              :class="{ 'btn-accent': showMacd }"
+              x-on:click="showMacd = !showMacd">MACD</button>
+      <button class="btn btn-sm"
+              :class="{ 'btn-accent': showMl }"
+              x-on:click="showMl = !showMl">ML</button>
+      <button class="btn btn-sm"
+              :class="{ 'btn-accent': showForensic }"
+              x-on:click="showForensic = !showForensic">Forensic</button>
+      <span class="chart-toolbar-divider"></span>
+      <button class="btn btn-sm"
+              :class="{ 'btn-accent': showMc }"
+              x-on:click="showMc = !showMc"
+              title="Toggle Monte Carlo projection">Monte Carlo</button>
+      <button class="btn btn-sm"
+              :class="{ 'btn-accent': logScale }"
+              x-on:click="logScale = !logScale"
+              title="Toggle logarithmic scale">
+        <span x-text="logScale ? 'LOG' : 'LIN'"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main price chart -->
+  <div class="card chart-main-panel">
+    <h4 class="chart-panel-title">{{ ticker }} — {{ period }}</h4>
+    <svg class="chart-svg" viewBox="0 0 900 220" preserveAspectRatio="none"
+         role="img" aria-label="Price chart for {{ ticker }}">
+      {% if price_data.close %}
+      {% set close_pts = to_svg_points(price_data.dates, price_data.close, 900, 220) %}
+
+      <!-- Bollinger Bands fill -->
+      {% if price_data.bb_upper and price_data.bb_lower %}
+      {% set bb_up_pts = to_svg_points(price_data.dates, price_data.bb_upper, 900, 220) %}
+      {% set bb_lo_pts = to_svg_points(price_data.dates, price_data.bb_lower, 900, 220) %}
+      {% if bb_up_pts and bb_lo_pts %}
+      <polygon points="{{ bb_up_pts }} {{ bb_lo_pts.split(' ') | reverse | join(' ') }}"
+               fill="var(--accent)" opacity="0.06" />
+      <polyline points="{{ bb_up_pts }}"
+                fill="none" stroke="var(--accent)" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.4" />
+      <polyline points="{{ bb_lo_pts }}"
+                fill="none" stroke="var(--accent)" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.4" />
+      {% endif %}
+      {% endif %}
+
+      <!-- Bollinger middle -->
+      {% if price_data.bb_middle %}
+      {% set bb_mid_pts = to_svg_points(price_data.dates, price_data.bb_middle, 900, 220) %}
+      {% if bb_mid_pts %}
+      <polyline points="{{ bb_mid_pts }}"
+                fill="none" stroke="var(--accent)" stroke-width="0.7" stroke-dasharray="4,4" opacity="0.5" />
+      {% endif %}
+      {% endif %}
+
+      <!-- Benchmark overlay -->
+      {% if price_data.benchmark_close %}
+      {% set bm_pts = to_svg_points(price_data.benchmark_dates, price_data.benchmark_close, 900, 220) %}
+      {% if bm_pts %}
+      <polyline points="{{ bm_pts }}"
+                fill="none" stroke="#6b7280" stroke-width="1" stroke-dasharray="4,2" opacity="0.5" />
+      {% endif %}
+      {% endif %}
+
+      <!-- Price line -->
+      {% if close_pts %}
+      <polyline points="{{ close_pts }}"
+                fill="none" stroke="var(--positive)" stroke-width="1.5"
+                stroke-linejoin="round" stroke-linecap="round" />
+      {% endif %}
+
+      <!-- Trade entry markers -->
+      {% for entry in price_data.trade_entries %}
+      <circle cx="{{ entry.x }}" cy="{{ entry.y }}" r="4"
+              fill="var(--accent)" stroke="var(--bg)" stroke-width="1" />
+      {% endfor %}
+      {% else %}
+      <text x="450" y="110" text-anchor="middle" fill="var(--muted)" font-size="14">
+        No price data available for {{ ticker }}
+      </text>
+      {% endif %}
+
+      <!-- Monte Carlo overlay target (populated via HTMX) -->
+      <g id="mc-overlay" :visibility="showMc ? 'visible' : 'hidden'" visibility="hidden">
+      </g>
+    </svg>
+  </div>
+
+  <!-- Forensic panel -->
+  <div class="chart-overlay-panel" x-show="showForensic" x-cloak>
+    <div id="forensic-panel"
+         hx-get="/ui/chart/overlay/forensic?ticker={{ ticker }}&entry_date=2024-06-15&entry_price=100.0"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <p class="muted" style="font-size:0.8rem;">Loading forensic analysis...</p>
+    </div>
+  </div>
+
+  <!-- ML confidence sub-panel -->
+  <div class="chart-overlay-panel" x-show="showMl" x-cloak>
+    <div id="ml-panel"
+         hx-get="/ui/chart/overlay/ml?ticker={{ ticker }}&period={{ period }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <p class="muted" style="font-size:0.8rem;">Loading ML confidence...</p>
+    </div>
+  </div>
+
+  <!-- RSI sub-panel -->
+  <div class="chart-overlay-panel" x-show="showRsi" x-cloak>
+    <div id="rsi-panel"
+         hx-get="/ui/chart/overlay/rsi?ticker={{ ticker }}&period={{ period }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <p class="muted" style="font-size:0.8rem;">Loading RSI...</p>
+    </div>
+  </div>
+
+  <!-- MACD sub-panel -->
+  <div class="chart-overlay-panel" x-show="showMacd" x-cloak>
+    <div id="macd-panel"
+         hx-get="/ui/chart/overlay/macd?ticker={{ ticker }}&period={{ period }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <p class="muted" style="font-size:0.8rem;">Loading MACD...</p>
+    </div>
+  </div>
+
+  <!-- Monte Carlo overlay loader (fetches SVG content into the chart) -->
+  <div style="display:none"
+       hx-get="/ui/chart/monte-carlo?ticker={{ ticker }}&period=1"
+       hx-trigger="load"
+       hx-target="#mc-overlay"
+       hx-swap="innerHTML">
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,53 @@
+{# Sortable position table fragment -- loaded via HTMX #}
+{% if positions %}
+<table class="feature-table">
+  <thead>
+    <tr>
+      <th>
+        <button class="sort-btn"
+                aria-label="Sort by ticker"
+                hx-get="/ui/partials/position-table?sort=ticker"
+                hx-target="#position-table"
+                hx-swap="innerHTML">Ticker</button>
+      </th>
+      <th class="text-right">
+        <button class="sort-btn"
+                aria-label="Sort by weight"
+                hx-get="/ui/partials/position-table?sort=weight"
+                hx-target="#position-table"
+                hx-swap="innerHTML">Weight</button>
+      </th>
+      <th class="text-right">
+        <button class="sort-btn"
+                aria-label="Sort by today's profit and loss"
+                hx-get="/ui/partials/position-table?sort=pnl_today"
+                hx-target="#position-table"
+                hx-swap="innerHTML">P&amp;L Today</button>
+      </th>
+      <th class="text-right">
+        <button class="sort-btn"
+                aria-label="Sort by total profit and loss"
+                hx-get="/ui/partials/position-table?sort=pnl_total"
+                hx-target="#position-table"
+                hx-swap="innerHTML">P&amp;L Total</button>
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for pos in positions %}
+    <tr>
+      <td><span class="ticker-chip">{{ pos.ticker }}</span></td>
+      <td class="text-right font-mono">{{ "%.1f%%" | format(pos.weight * 100) }}</td>
+      <td class="text-right font-mono {{ 'badge-positive' if pos.pnl_today >= 0 else 'badge-negative' }}">
+        {{ pos.pnl_today | pct }}
+      </td>
+      <td class="text-right font-mono {{ 'badge-positive' if pos.pnl_total >= 0 else 'badge-negative' }}">
+        {{ pos.pnl_total | pct }}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="skeleton-text">No positions available</p>
+{% endif %}

@@ -1,0 +1,16 @@
+assets:
+  BTCGBP:
+    weekly_allocation_gbp: 10.0
+    min_order_gbp: 5.0
+    enabled: true
+    funding_proxy: "BTCUSDT"
+  ETHGBP:
+    weekly_allocation_gbp: 10.0
+    min_order_gbp: 5.0
+    enabled: true
+    funding_proxy: "ETHUSDT"
+  XRPGBP:
+    weekly_allocation_gbp: 5.0
+    min_order_gbp: 2.0
+    enabled: true
+    funding_proxy: null

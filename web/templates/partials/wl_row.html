@@ -1,0 +1,76 @@
+{# Shared watchlist row -- canonical structure for ALL watchlist displays.
+   Expects: row (dict with keys: id, ticker_raw, ticker_display, exchange,
+   company_name, logo_colour, price_fmt, change_fmt, direction, spark_points).
+#}
+<div class="wl-row" data-id="{{ row.id }}"
+     hx-get="/ui/watchlist/card/{{ row.ticker_raw }}"
+     hx-trigger="every 30s"
+     hx-swap="outerHTML">
+  {# 1: Logo square #}
+  <div style="width:28px;height:28px;border-radius:6px;background:{{ row.logo_colour }};
+    display:flex;align-items:center;justify-content:center;color:#fff;
+    font-weight:700;font-size:11px;flex-shrink:0;">{{ row.ticker_raw[:1] }}</div>
+
+  {# 2: Name block #}
+  <div style="min-width:0;">
+    <div style="font-size:12px;font-weight:600;color:var(--t1);white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis;">{{ row.company_name }}</div>
+    <div style="font-size:10px;font-family:var(--mono);color:var(--t2);">{{ row.ticker_display }} &middot; {{ row.exchange }}</div>
+  </div>
+
+  {# 3: Price block #}
+  <div style="text-align:right;">
+    <div style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--t1);">{{ row.price_fmt }}</div>
+    <div style="font-size:10px;font-weight:700;font-family:var(--mono);
+      color:var(--{{ 'green' if row.direction == 'up' else 'red' }});">
+      {%- if row.direction == 'up' -%}&uarr;{%- else -%}&darr;{%- endif -%}
+      {{ row.change_fmt }}
+    </div>
+  </div>
+
+  {# 4: Sparkline SVG #}
+  <svg class="wl-spark" width="56" height="26" viewBox="0 0 56 26" preserveAspectRatio="none">
+    {%- set pts = row.spark_points or [] -%}
+    {%- if pts | length > 1 -%}
+      {%- set mn = pts | min -%}
+      {%- set mx = pts | max -%}
+      {%- set rng = mx - mn if mx != mn else 1 -%}
+      {%- set color = '#23c55e' if row.direction == 'up' else '#ef4444' -%}
+      {%- set line_pts = [] -%}
+      {%- for p in pts -%}
+        {%- set x = (loop.index0 / (pts | length - 1)) * 56 -%}
+        {%- set y = 26 - ((p - mn) / rng) * 22 - 2 -%}
+        {%- set _ = line_pts.append("%.1f,%.1f" | format(x, y)) -%}
+      {%- endfor -%}
+      <defs>
+        <linearGradient id="sg-{{ row.id }}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="{{ color }}" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="{{ color }}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <polygon points="{{ line_pts | join(' ') }} 56,26 0,26" fill="url(#sg-{{ row.id }})"/>
+      <polyline points="{{ line_pts | join(' ') }}" fill="none"
+                stroke="{{ color }}" stroke-width="1.5" stroke-linejoin="round"/>
+    {%- endif -%}
+  </svg>
+
+  {# 5: Refresh button #}
+  <button class="wl-btn act-refresh" title="Refresh"
+          hx-post="/ui/watchlist/refresh/{{ row.ticker_raw }}"
+          hx-target="closest .wl-row"
+          hx-swap="outerHTML"
+          hx-indicator=".act-refresh">&#8635;</button>
+
+  {# 6: Chart link #}
+  <a class="wl-btn act-goto" title="Open chart"
+     href="/ui/chart?ticker={{ row.ticker_raw }}"
+     hx-get="/ui/chart?ticker={{ row.ticker_raw }}"
+     hx-target="body" hx-push-url="true">&#10530;</a>
+
+  {# 7: Remove button #}
+  <button class="wl-btn act-remove" title="Remove"
+          hx-post="/ui/watchlist/remove/{{ row.ticker_raw }}"
+          hx-target="closest .wl-row"
+          hx-swap="outerHTML swap:0.3s"
+          hx-on::before-request="this.closest('.wl-row').classList.add('removing')">&#10005;</button>
+</div>

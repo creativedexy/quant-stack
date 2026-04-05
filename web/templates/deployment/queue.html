@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Trade Queue | Quant Stack{% endblock %}
+
+{% block head %}
+<style>
+  .queue-summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem; margin-bottom: 1.25rem;
+  }
+  .queue-summary-card {
+    background: var(--card); border-radius: 8px; padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+  }
+  .queue-summary-label {
+    font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .queue-summary-value {
+    font-family: 'IBM Plex Mono', monospace; font-size: 1.25rem; font-weight: 600;
+  }
+  .queue-table {
+    width: 100%; border-collapse: collapse; font-size: 0.85rem;
+  }
+  .queue-table th {
+    text-align: left; padding: 0.5rem 0.75rem; color: var(--text-muted);
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+  }
+  .queue-table td {
+    padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border);
+  }
+  .queue-table tr:hover { background: var(--card-alt); }
+  .order-status {
+    display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px;
+    font-size: 0.7rem; font-weight: 600;
+  }
+  .order-PENDING_APPROVAL { background: rgba(255,180,0,0.15); color: var(--amber); }
+  .order-APPROVED { background: rgba(0,200,150,0.15); color: var(--green); }
+  .order-REJECTED { background: rgba(255,80,80,0.15); color: var(--red); }
+  .order-SUBMITTED { background: rgba(0,150,255,0.15); color: var(--cyan); }
+  .order-FILLED { background: rgba(0,200,150,0.15); color: var(--green); }
+  .order-FAILED { background: rgba(255,80,80,0.15); color: var(--red); }
+  .confirm-overlay {
+    background: var(--card); border: 2px solid var(--amber); border-radius: 8px;
+    padding: 1.25rem; margin-top: 1rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" id="deployment-content">
+  <h1 style="font-size:1.5rem; margin:0 0 0.25rem;">Trade Queue</h1>
+  <p style="color:var(--text-muted); font-size:0.85rem; margin:0 0 1.25rem;">
+    {{ orders|length }} orders generated. Review and confirm before submission.
+  </p>
+
+  {#- Queue summary -#}
+  <div class="queue-summary">
+    <div class="queue-summary-card">
+      <div class="queue-summary-label">Total Orders</div>
+      <div class="queue-summary-value">{{ summary.total_orders }}</div>
+    </div>
+    <div class="queue-summary-card">
+      <div class="queue-summary-label">Approved</div>
+      <div class="queue-summary-value" style="color:var(--green);">
+        {{ summary.status_counts.get('APPROVED', 0) if summary.status_counts is mapping else 0 }}
+      </div>
+    </div>
+    <div class="queue-summary-card">
+      <div class="queue-summary-label">Total GBP</div>
+      <div class="queue-summary-value">
+        &pound;{{ "%.2f"|format(summary.total_approved_gbp) }}
+      </div>
+    </div>
+    <div class="queue-summary-card">
+      <div class="queue-summary-label">Buying Power</div>
+      <div class="queue-summary-value">
+        {% if buying_power is not none %}
+          &pound;{{ "%.2f"|format(buying_power) }}
+        {% else %}
+          <span style="color:var(--text-muted);">N/A</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {#- Orders table -#}
+  <div style="background:var(--card); border-radius:8px; border:1px solid var(--border); overflow-x:auto;">
+    <table class="queue-table">
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Direction</th>
+          <th>Shares</th>
+          <th>Type</th>
+          <th>Limit Price</th>
+          <th>Est. GBP</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+        <tr id="order-{{ o.order_id }}">
+          <td style="font-family:'IBM Plex Mono',monospace; font-weight:600;">
+            <a href="/ui/analyse?ticker={{ o.ticker }}" style="color:var(--cyan); text-decoration:none;"
+               title="Research {{ o.ticker }} on Analyse page">{{ o.ticker }}</a>
+          </td>
+          <td>{{ o.direction }}</td>
+          <td style="font-family:'IBM Plex Mono',monospace;">{{ o.quantity }}</td>
+          <td>{{ o.order_type }}</td>
+          <td style="font-family:'IBM Plex Mono',monospace;">
+            {% if o.limit_price %}
+              &pound;{{ "%.4f"|format(o.limit_price) }}
+            {% else %}
+              MARKET
+            {% endif %}
+          </td>
+          <td style="font-family:'IBM Plex Mono',monospace;">
+            {% if o.limit_price %}
+              &pound;{{ "%.2f"|format(o.limit_price * o.quantity) }}
+            {% else %}
+              --
+            {% endif %}
+          </td>
+          <td><span class="order-status order-{{ o.status }}">{{ o.status }}</span></td>
+          <td>
+            {% if o.status == 'PENDING_APPROVAL' %}
+            <button
+              hx-post="/ui/execute/deployment/queue/approve"
+              hx-vals='{"order_id": "{{ o.order_id }}"}'
+              hx-target="#order-{{ o.order_id }}"
+              hx-swap="outerHTML"
+              style="background:none; border:none; color:var(--green); cursor:pointer; font-size:0.8rem; font-weight:600;"
+            >Approve</button>
+            <button
+              hx-post="/ui/execute/deployment/queue/reject"
+              hx-vals='{"order_id": "{{ o.order_id }}"}'
+              hx-target="#order-{{ o.order_id }}"
+              hx-swap="outerHTML"
+              style="background:none; border:none; color:var(--red); cursor:pointer; font-size:0.8rem; font-weight:600;"
+            >Reject</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {#- Double confirmation overlay -#}
+  <div x-data="{ showConfirm: false }" style="margin-top:1.25rem;">
+    <div class="bulk-actions" style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+      <button
+        hx-post="/ui/execute/deployment/queue/approve-all"
+        hx-target="#deployment-content"
+        hx-swap="innerHTML"
+        class="btn"
+        style="background:var(--green); color:#000; font-weight:600; padding:0.5rem 1rem; border-radius:6px;"
+      >
+        Approve All
+      </button>
+      <button
+        x-on:click="showConfirm = true"
+        class="btn"
+        style="background:var(--amber); color:#000; font-weight:600; padding:0.5rem 1rem; border-radius:6px;"
+      >
+        Confirm Live Execution
+      </button>
+    </div>
+
+    <div x-show="showConfirm" x-cloak class="confirm-overlay">
+      <p style="font-weight:600; color:var(--amber); margin:0 0 0.5rem;">
+        Confirm Trade Submission
+      </p>
+      <p style="font-size:0.85rem; color:var(--text-muted); margin:0 0 0.75rem;">
+        This will submit {{ summary.status_counts.get('APPROVED', 0) if summary.status_counts is mapping else 0 }} approved orders
+        totalling &pound;{{ "%.2f"|format(summary.total_approved_gbp) }} to Interactive Brokers.
+        This action cannot be undone.
+      </p>
+      <div style="display:flex; gap:0.5rem;">
+        <button
+          hx-post="/ui/execute/deployment/queue/submit"
+          hx-vals='{"dry_run": "false"}'
+          hx-target="#deployment-content"
+          hx-swap="innerHTML"
+          class="btn"
+          style="background:var(--red); color:#fff; font-weight:700; padding:0.5rem 1.5rem; border-radius:6px;"
+        >
+          SUBMIT LIVE ORDERS
+        </button>
+        <button
+          hx-post="/ui/execute/deployment/queue/submit"
+          hx-vals='{"dry_run": "true"}'
+          hx-target="#deployment-content"
+          hx-swap="innerHTML"
+          class="btn"
+          style="background:var(--card-alt); padding:0.5rem 1rem; border-radius:6px;"
+        >
+          Dry Run Only
+        </button>
+        <button
+          x-on:click="showConfirm = false"
+          class="btn"
+          style="background:var(--card-alt); padding:0.5rem 1rem; border-radius:6px;"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% include "deployment/_emergency_stop.html" %}
+{% endblock %}

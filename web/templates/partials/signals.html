@@ -1,0 +1,27 @@
+{# Active signals panel — HTMX-swappable fragment.
+   Rendered as an include in overview.html and polled by hx-get.
+#}
+{% if signals %}
+<div class="signals-list">
+  {% for sig in signals %}
+  <div class="signal-row">
+    <span class="ticker-chip">{{ sig.ticker }}</span>
+    <span class="signal-badge signal-{{ sig.direction | lower }}">
+      {{ sig.direction | upper }}
+    </span>
+    <span class="font-mono" style="font-size: 0.8rem;">
+      {{ "%.0f" | format(sig.confidence * 100) }}%
+    </span>
+    {% if sig.features %}
+    <span class="muted" style="font-size: 0.75rem;">
+      {{ sig.features | join(", ") }}
+    </span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted" style="text-align: center; padding: 1rem 0;">
+  No signals today
+</p>
+{% endif %}

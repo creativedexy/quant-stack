@@ -1,0 +1,105 @@
+{#- Single persona card — swapped by HTMX on state changes -#}
+<div class="card" style="padding:1.25rem;" x-data="{ confirmAction: '' }">
+  {#- Header: name + state badge -#}
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+    <a href="/ui/personas/{{ persona.persona_id }}" style="text-decoration:none; color:inherit;">
+      <h3 style="margin:0; font-size:1rem;">{{ persona.name }}</h3>
+    </a>
+    <span class="badge {{ persona.state_class | default('badge-grey') }}"
+          style="font-size:0.7rem; padding:0.2rem 0.6rem; border-radius:4px;">
+      {{ persona.state | default('unknown') | upper }}
+    </span>
+  </div>
+
+  {#- Details -#}
+  <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.75rem;">
+    <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
+      <span>Strategy</span>
+      <span class="font-mono">{{ persona.strategy | default('—') }}</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
+      <span>Budget</span>
+      <span class="font-mono">{{ "%.0f" | format(persona.capital_pct * 100) }}%</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
+      <span>Universe</span>
+      <span class="font-mono">{{ persona.universe | length }} tickers</span>
+    </div>
+    <div style="display:flex; justify-content:space-between;">
+      <span>Type</span>
+      <span class="font-mono">{{ persona.type | default('—') | replace('_', ' ') }}</span>
+    </div>
+  </div>
+
+  {%- if persona.last_brief_at %}
+  <div style="font-size:0.7rem; color:var(--text-secondary); margin-bottom:0.75rem;">
+    Last brief: {{ persona.last_brief_at[:16] | replace('T', ' ') }}
+  </div>
+  {%- endif %}
+
+  {#- Action buttons -#}
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+    {%- if persona.state == 'pending' %}
+    <button class="btn btn-sm btn-green"
+            hx-post="/ui/personas/{{ persona.persona_id }}/activate"
+            hx-target="#persona-card-{{ persona.persona_id }}"
+            hx-swap="innerHTML">
+      Activate
+    </button>
+    {%- endif %}
+
+    {%- if persona.state == 'active' %}
+    <button class="btn btn-sm"
+            hx-post="/ui/personas/{{ persona.persona_id }}/brief"
+            hx-target="#brief-{{ persona.persona_id }}"
+            hx-swap="innerHTML">
+      Generate Brief
+    </button>
+    <button class="btn btn-sm btn-outline"
+            x-on:click="confirmAction = 'pause'"
+            x-show="confirmAction !== 'pause'">
+      Pause
+    </button>
+    <button class="btn btn-sm btn-amber"
+            x-show="confirmAction === 'pause'"
+            hx-post="/ui/personas/{{ persona.persona_id }}/pause"
+            hx-target="#persona-card-{{ persona.persona_id }}"
+            hx-swap="innerHTML">
+      Confirm Pause
+    </button>
+    {%- endif %}
+
+    {%- if persona.state in ['active', 'paused', 'pending'] %}
+    <button class="btn btn-sm btn-outline"
+            x-on:click="confirmAction = 'deactivate'"
+            x-show="confirmAction !== 'deactivate'">
+      Deactivate
+    </button>
+    <button class="btn btn-sm btn-red"
+            x-show="confirmAction === 'deactivate'"
+            hx-post="/ui/personas/{{ persona.persona_id }}/deactivate"
+            hx-target="#persona-card-{{ persona.persona_id }}"
+            hx-swap="innerHTML">
+      Confirm Deactivate
+    </button>
+    {%- endif %}
+
+    {%- if persona.state == 'dormant' %}
+    <button class="btn btn-sm btn-outline"
+            hx-post="/ui/personas/{{ persona.persona_id }}/activate"
+            hx-target="#persona-card-{{ persona.persona_id }}"
+            hx-swap="innerHTML">
+      Force Activate
+    </button>
+    {%- endif %}
+  </div>
+
+  {#- Brief output zone -#}
+  <div id="brief-{{ persona.persona_id }}" style="margin-top:0.75rem;"></div>
+
+  {%- if message %}
+  <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.5rem;">
+    {{ message }}
+  </div>
+  {%- endif %}
+</div>

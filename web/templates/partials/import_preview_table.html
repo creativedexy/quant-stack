@@ -1,0 +1,34 @@
+{% if error %}
+<p class="modal-error">{{ error }}</p>
+{% else %}
+<table class="feature-table" style="width: 100%; font-size: 0.8rem; margin-bottom: 0.75rem;">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Ticker</th>
+      <th class="text-right">Price (p)</th>
+      <th class="text-right">Amount</th>
+      <th>Note</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td class="font-mono">{{ row.date }}</td>
+      <td>{{ row.ticker }}</td>
+      <td class="text-right font-mono">{{ row.price }}</td>
+      <td class="text-right font-mono">{{ row.amount_gbp }}</td>
+      <td class="muted" style="font-size: 0.7rem;">{{ row.note }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="muted" style="font-size: 0.75rem;">{{ rows | length }} row(s) ready to import. Duplicates will be skipped.</p>
+<form hx-post="/ui/upload/purchases/confirm"
+      hx-target="#modal-container">
+  <input type="hidden" name="csv_data" value="{{ csv_raw }}">
+  <button type="submit" class="btn btn-sm btn-accent" style="width: 100%;">
+    Import All
+  </button>
+</form>
+{% endif %}

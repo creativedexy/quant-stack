@@ -1,0 +1,72 @@
+{% if articles %}
+<div class="news-feed-list">
+  {% for article in articles %}
+  <div class="news-item" x-data="{ open: false }" x-on:click="open = !open">
+
+    <!-- Top row: ticker tags + headline + sentiment -->
+    <div class="news-item-row">
+      {% for t in article.get('tickers_mentioned', []) %}
+      <span class="news-ticker-tag">{{ t.replace('.L', '') }}</span>
+      {% endfor %}
+
+      <span class="news-headline">{{ article.title }}</span>
+
+      {% set sentiment = article.get('sentiment', 'neutral') | lower %}
+      <span class="sentiment-chip sentiment-{{ sentiment }}">{{ sentiment }}</span>
+    </div>
+
+    <!-- Meta row: source | relevance | age -->
+    <div class="news-meta-row">
+      <span>{{ article.get('source', 'Unknown') }}</span>
+      {% if article.get('relevance_score') %}
+      <span>{{ article.relevance_score }}/10</span>
+      {% endif %}
+      <span>{{ article.get('published', '') | truncate(16, True, '') }}</span>
+    </div>
+
+    <!-- Expanded content (Alpine.js toggle) -->
+    <div x-show="open" x-cloak class="news-expand">
+      <!-- Summary box -->
+      <div class="news-summary-box">
+        {{ article.get('summary', 'No summary available.') }}
+      </div>
+
+      <!-- Signal impact footer -->
+      {% if article.get('signal_impact') %}
+      <div class="news-impact-row">
+        <span class="news-impact-label">Signal impact</span>
+        {% for impact in article.signal_impact.split(' | ') %}
+          {% if impact %}
+            {% if 'Strengthens' in impact %}
+            <span class="impact-chip impact-strengthens">{{ impact }}</span>
+            {% elif 'Contradicts' in impact %}
+            <span class="impact-chip impact-contradicts">{{ impact }}</span>
+            {% else %}
+            <span class="impact-chip impact-other">{{ impact }}</span>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+
+        {% for t in article.get('tickers_mentioned', [])[:1] %}
+        <a href="/ui/chart?ticker={{ t }}"
+           class="news-chart-link"
+           onclick="event.stopPropagation();">View Chart -></a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if article.get('sentiment_reason') %}
+      <div class="news-sentiment-reason">
+        {{ article.sentiment_reason }}
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card news-empty">
+  <p class="muted">No news articles available. Run a news refresh or check feed configuration.</p>
+</div>
+{% endif %}

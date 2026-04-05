@@ -1,0 +1,12 @@
+.env
+__pycache__
+*.pyc
+.pytest_cache
+*.egg-info
+dist/
+build/
+.coverage
+htmlcov/
+data/budget_state.json
+data/performance.db
+data/backtest_results.csv

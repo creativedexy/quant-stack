@@ -1,0 +1,65 @@
+<div class="card chart-sub-panel">
+  <h4 class="chart-panel-title">Forensic Analysis — {{ forensic_data.ticker }}</h4>
+  <div class="forensic-grid">
+    <div class="forensic-chart">
+      <svg class="chart-svg chart-svg-sm" viewBox="0 0 400 120" preserveAspectRatio="none">
+        {% if forensic_data.window_close %}
+        {% set f_pts = to_svg_points(forensic_data.window_dates, forensic_data.window_close, 400, 120, 20, 10) %}
+        {% if f_pts %}
+        <polyline points="{{ f_pts }}"
+                  fill="none" stroke="var(--accent)" stroke-width="1.5"
+                  stroke-linejoin="round" stroke-linecap="round" />
+        {% endif %}
+
+        <!-- Entry price line -->
+        {% set n = forensic_data.window_close | length %}
+        {% if n > 0 %}
+        {% set min_p = forensic_data.window_close | min %}
+        {% set max_p = forensic_data.window_close | max %}
+        {% set p_range = max_p - min_p if max_p != min_p else 1 %}
+        {% set entry_y = 10 + (1 - (forensic_data.entry_price - min_p) / p_range) * 100 %}
+        <line x1="20" y1="{{ entry_y }}" x2="380" y2="{{ entry_y }}"
+              stroke="var(--warning)" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.7" />
+        <text x="382" y="{{ entry_y + 3 }}" fill="var(--warning)" font-size="8">Entry</text>
+        {% endif %}
+        {% else %}
+        <text x="200" y="60" text-anchor="middle" fill="var(--muted)" font-size="12">
+          No window data
+        </text>
+        {% endif %}
+      </svg>
+    </div>
+    <div class="forensic-stats">
+      <table class="feature-table forensic-table">
+        <tbody>
+          <tr>
+            <td class="muted">Entry Date</td>
+            <td class="font-mono">{{ forensic_data.entry_date }}</td>
+          </tr>
+          <tr>
+            <td class="muted">Entry Price</td>
+            <td class="font-mono">&pound;{{ "%.2f" | format(forensic_data.entry_price) }}</td>
+          </tr>
+          <tr>
+            <td class="muted">Optimal Date</td>
+            <td class="font-mono">{{ forensic_data.optimal_date }}</td>
+          </tr>
+          <tr>
+            <td class="muted">Optimal Price</td>
+            <td class="font-mono">&pound;{{ "%.2f" | format(forensic_data.optimal_price) }}</td>
+          </tr>
+          <tr>
+            <td class="muted">Slippage</td>
+            <td class="font-mono {% if forensic_data.slippage_pct > 0 %}text-negative{% else %}text-positive{% endif %}">
+              {{ "%.2f" | format(forensic_data.slippage_pct) }}%
+            </td>
+          </tr>
+          <tr>
+            <td class="muted">Position Size</td>
+            <td class="font-mono">{{ forensic_data.position_size }} shares</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

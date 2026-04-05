@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+{% block title %}Execute | Quant Stack{% endblock %}
+
+{% block head %}
+<style>
+  .exec-layout {
+    display: flex; gap: 1.25rem; align-items: flex-start;
+  }
+  .exec-main { flex: 1; min-width: 0; }
+  .exec-sidebar { width: 320px; flex-shrink: 0; }
+
+  @media (max-width: 900px) {
+    .exec-layout { flex-direction: column; }
+    .exec-sidebar { width: 100%; }
+  }
+
+  .exec-header {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.25rem;
+  }
+  .exec-header-left {
+    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+  }
+
+  .trading-mode-badge {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.3rem 0.75rem; border-radius: 4px;
+    font-weight: 600; font-size: 0.8rem; letter-spacing: 0.03em;
+  }
+  .trading-mode-paper {
+    background: var(--amber-dim); color: var(--amber);
+    border: 1px solid rgba(245,158,11,0.3);
+  }
+  .trading-mode-live {
+    background: var(--green-dim); color: var(--green);
+    border: 1px solid rgba(35,197,94,0.3);
+  }
+
+  .pulse-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block; animation: pulse-glow 2s ease-in-out infinite;
+  }
+  .pulse-dot-amber { background: var(--amber); }
+  .pulse-dot-green { background: var(--green); }
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .health-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem; margin-bottom: 1.25rem;
+  }
+  .health-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 0.5rem; padding: 0.75rem;
+    display: flex; align-items: flex-start; gap: 0.6rem;
+  }
+  .health-card-warn  { border-left: 3px solid var(--amber); }
+  .health-card-error { border-left: 3px solid var(--red); }
+  .health-icon {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .health-icon-ok   { background: var(--green-dim); color: var(--green); }
+  .health-icon-warn { background: var(--amber-dim); color: var(--amber); }
+  .health-icon-error{ background: var(--red-dim); color: var(--red); }
+  .health-label { font-weight: 600; font-size: 0.8rem; }
+  .health-status { font-size: 0.75rem; }
+  .health-detail { font-size: 0.7rem; color: var(--t2); }
+
+  .rebalance-panel {
+    background: var(--card); border: 1px solid var(--border);
+    border-left: 3px solid var(--amber);
+    border-radius: 0.5rem; padding: 1rem; margin-bottom: 1.25rem;
+  }
+  .rebalance-item {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .rebalance-item:last-child { border-bottom: none; }
+  .rebalance-actions { margin-left: auto; display: flex; gap: 0.4rem; }
+
+  .order-tabs {
+    display: flex; gap: 0.25rem; margin-bottom: 0.75rem; flex-wrap: wrap;
+  }
+  .order-tab {
+    padding: 0.3rem 0.65rem; border-radius: 4px; font-size: 0.75rem;
+    background: var(--card-hi); border: 1px solid var(--border);
+    color: var(--t2); cursor: pointer; transition: all 0.15s;
+  }
+  .order-tab:hover { color: var(--t1); border-color: var(--border-hi); }
+  .order-tab-active {
+    color: var(--amber); border-color: var(--amber);
+    border-bottom: 2px solid var(--amber);
+  }
+  .order-tab-count {
+    font-size: 0.65rem; font-family: var(--mono);
+    margin-left: 0.25rem; opacity: 0.7;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+  }
+  .status-dot-filled   { background: var(--green); }
+  .status-dot-queued    { background: var(--amber); animation: pulse-glow 2s ease-in-out infinite; }
+  .status-dot-pending   { background: var(--cyan); }
+  .status-dot-rejected  { background: var(--red); }
+
+  .direction-chip {
+    display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px;
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em;
+  }
+  .direction-buy  { background: var(--green-dim); color: var(--green); }
+  .direction-sell { background: var(--red-dim); color: var(--red); }
+
+  .order-row {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .order-row:last-child { border-bottom: none; }
+  .order-desc { flex: 1; min-width: 0; font-size: 0.8rem; }
+  .order-meta {
+    font-size: 0.7rem; color: var(--t2); font-family: var(--mono);
+  }
+  .order-reject { font-size: 0.7rem; color: var(--red); margin-top: 0.15rem; }
+
+  .news-sidebar-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+  .news-badge {
+    background: var(--green-dim); color: var(--green);
+    padding: 0.1rem 0.4rem; border-radius: 3px;
+    font-size: 0.65rem; font-family: var(--mono);
+  }
+  .news-item {
+    padding: 0.6rem 0; border-bottom: 1px solid var(--border);
+  }
+  .news-item:last-child { border-bottom: none; }
+  .news-item-impact { border-left: 2px solid var(--amber); padding-left: 0.5rem; }
+  .news-time { font-size: 0.65rem; color: var(--t2); font-family: var(--mono); }
+  .news-title { font-weight: 600; font-size: 0.8rem; margin: 0.15rem 0; }
+  .news-source { font-size: 0.7rem; color: var(--t2); }
+  .news-expand {
+    font-size: 0.75rem; color: var(--t2); margin-top: 0.3rem;
+    line-height: 1.5;
+  }
+  .impact-chip-inline {
+    display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px;
+    font-size: 0.65rem; font-weight: 500;
+  }
+  .impact-green  { background: var(--green-dim); color: var(--green); }
+  .impact-red    { background: var(--red-dim); color: var(--red); }
+  .impact-amber  { background: var(--amber-dim); color: var(--amber); }
+  .impact-grey   { background: rgba(122,122,122,0.12); color: var(--t2); }
+
+  .chip-source {
+    display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px;
+    font-size: 0.65rem; font-family: var(--mono);
+  }
+  .chip-dca       { background: var(--purple-dim); color: var(--purple); }
+  .chip-rebalance { background: var(--amber-dim); color: var(--amber); }
+  .chip-manual    { background: rgba(122,122,122,0.12); color: var(--t2); }
+  .chip-stop_loss { background: var(--red-dim); color: var(--red); }
+
+  .confirm-modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .confirm-modal {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 0.5rem; padding: 1.5rem; max-width: 400px; width: 90%;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="{ showLiveModal: false, activeTab: 'all' }">
+
+  {# ── Header bar ──────────────────────────────────────────────── #}
+  <div class="exec-header">
+    <div class="exec-header-left">
+      <div id="mode-badge">
+        {% if trading_mode == 'live' %}
+          <span class="trading-mode-badge trading-mode-live">
+            <span class="pulse-dot pulse-dot-green"></span>
+            LIVE TRADING
+          </span>
+        {% else %}
+          <span class="trading-mode-badge trading-mode-paper">
+            <span class="pulse-dot pulse-dot-amber"></span>
+            PAPER TRADING
+          </span>
+        {% endif %}
+      </div>
+      <span class="text-muted" style="font-size:0.7rem;">
+        Last refreshed: <span class="font-mono">{{ last_refreshed }}</span>
+      </span>
+      <span class="text-muted" style="font-size:0.65rem;">
+        Auto-refresh every 30s
+      </span>
+    </div>
+    <div style="display:flex;gap:0.4rem;">
+      <button class="btn btn-sm"
+              hx-get="/ui/execute"
+              hx-target="main"
+              hx-swap="innerHTML">
+        Refresh Now
+      </button>
+      {% if trading_mode == 'paper' %}
+        <button class="btn btn-sm" style="color:var(--red);"
+                x-on:click="showLiveModal = true">
+          Switch to Live
+        </button>
+      {% else %}
+        <button class="btn btn-sm"
+                hx-post="/ui/execute/toggle-mode"
+                hx-target="#mode-badge"
+                hx-swap="innerHTML">
+          Switch to Paper
+        </button>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Capital Deployment link ────────────────────────────────── #}
+  <a href="/ui/execute/deployment"
+     style="display:flex;align-items:center;justify-content:space-between;
+            background:var(--card);border:1px solid var(--border);border-radius:8px;
+            padding:0.75rem 1.25rem;margin-bottom:1.25rem;text-decoration:none;
+            transition:border-color 0.2s;"
+     onmouseover="this.style.borderColor='var(--cyan)'"
+     onmouseout="this.style.borderColor='var(--border)'">
+    <div>
+      <span style="font-weight:600;font-size:0.95rem;">Capital Deployment</span>
+      <span class="text-muted" style="font-size:0.8rem;margin-left:0.75rem;">
+        Autonomous scan, analyse, and trade pipeline
+      </span>
+    </div>
+    <span style="color:var(--cyan);font-size:0.85rem;font-weight:600;">&rarr;</span>
+  </a>
+
+  {# ── Two-column layout ──────────────────────────────────────── #}
+  <div class="exec-layout">
+
+    {# ── LEFT: Main zone ────────────────────────────────────── #}
+    <div class="exec-main">
+
+      {# System health cards #}
+      <div class="health-row">
+        {% set health_icons = {
+          'broker': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+          'data_feed': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v9h-9"/></svg>',
+          'scheduler': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+          'model': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+          'auth': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+        } %}
+        {% set health_names = {
+          'broker': 'Broker',
+          'data_feed': 'Data Feed',
+          'scheduler': 'Scheduler',
+          'model': 'Model',
+          'auth': 'Auth',
+        } %}
+        {% for key in ['broker', 'data_feed', 'scheduler', 'model', 'auth'] %}
+          {% set h = health.get(key, {'status': 'ok', 'label': 'Unknown', 'detail': ''}) %}
+          <div class="health-card{% if h.status in ('warn', 'error') %} health-card-{{ h.status }}{% endif %}">
+            <div class="health-icon health-icon-{{ h.status }}">
+              {{ health_icons[key] | safe }}
+            </div>
+            <div>
+              <div class="health-label">{{ health_names[key] }}</div>
+              <div class="health-status
+                {%- if h.status == 'ok' %} text-green
+                {%- elif h.status == 'warn' %} text-amber
+                {%- else %} text-red{% endif %}">
+                {{ h.label }}
+              </div>
+              <div class="health-detail">{{ h.detail }}</div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      {# Rebalance suggestions #}
+      {% if suggestions %}
+      <div class="rebalance-panel">
+        <h3 style="margin-bottom:0.5rem;font-size:0.9rem;">
+          <span style="color:var(--amber);">Suggested Changes</span>
+          <span class="news-badge" style="margin-left:0.4rem;">{{ suggestions | length }}</span>
+        </h3>
+        {% for s in suggestions %}
+        <div class="rebalance-item" id="rebal-{{ s.ticker | replace('.', '-') }}">
+          <span class="font-mono text-cyan" style="font-size:0.85rem;">{{ s.ticker }}</span>
+          <span style="font-size:0.8rem;font-weight:500;">{{ s.action }}</span>
+          <span class="text-muted" style="font-size:0.75rem;">{{ s.reason }}</span>
+          <div class="rebalance-actions">
+            <button class="btn btn-sm"
+                    style="color:var(--amber);border-color:var(--amber);"
+                    hx-post="/ui/execute/rebalance/approve?ticker={{ s.ticker }}"
+                    hx-target="#rebal-{{ s.ticker | replace('.', '-') }}"
+                    hx-swap="innerHTML">
+              Approve
+            </button>
+            <button class="btn btn-sm"
+                    hx-post="/ui/execute/rebalance/defer?ticker={{ s.ticker }}"
+                    hx-target="#rebal-{{ s.ticker | replace('.', '-') }}"
+                    hx-swap="innerHTML">
+              Later
+            </button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {# Order book #}
+      <div class="card" style="margin-bottom:1.25rem;">
+        <h3 style="margin-bottom:0.5rem;">Order Book</h3>
+        <div class="order-tabs">
+          {% for tab_key, tab_label in [('all','All'), ('queued','Queued'), ('pending','Pending'), ('filled','Filled'), ('rejected','Rejected')] %}
+          <button class="order-tab"
+                  x-bind:class="activeTab === '{{ tab_key }}' && 'order-tab-active'"
+                  x-on:click="activeTab = '{{ tab_key }}'"
+                  hx-get="/ui/execute/orders?status={{ tab_key }}"
+                  hx-target="#order-list"
+                  hx-swap="innerHTML">
+            {{ tab_label }}
+            <span class="order-tab-count">{{ order_counts.get(tab_key, 0) }}</span>
+          </button>
+          {% endfor %}
+        </div>
+        <div id="order-list">
+          {% include "partials/order_list.html" %}
+        </div>
+      </div>
+
+      {# AI execution review #}
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+          <h3>AI Execution Review</h3>
+          <button class="btn btn-sm"
+                  style="color:var(--amber);border-color:var(--amber);"
+                  hx-post="/ui/execute/ai-review"
+                  hx-target="#ai-exec-result"
+                  hx-swap="innerHTML"
+                  hx-indicator="#ai-exec-spinner">
+            Get AI Execution Review
+          </button>
+        </div>
+        <span id="ai-exec-spinner" class="htmx-indicator text-muted" style="font-size:0.75rem;">
+          Analysing...
+        </span>
+        <div id="ai-exec-result">
+          <p class="text-muted" style="font-size:0.8rem;">
+            Click to get an AI review of system health and orders.
+          </p>
+        </div>
+      </div>
+
+    </div>
+
+    {# ── RIGHT: News sidebar ────────────────────────────────── #}
+    <div class="exec-sidebar">
+      <div class="card">
+        <div class="news-sidebar-header">
+          <h3>Market News</h3>
+          {% set news_count = news_items | length %}
+          {% if news_count > 0 %}
+            <span class="news-badge">{{ news_count }}</span>
+          {% endif %}
+        </div>
+        {% if news_items %}
+          {% for item in news_items %}
+          <div class="news-item {% if item.has_impact %}news-item-impact{% endif %}"
+               x-data="{ expanded: false }">
+            <div class="news-time">{{ item.time }}</div>
+            <div class="news-title"
+                 style="cursor:pointer;"
+                 x-on:click="expanded = !expanded">
+              {{ item.title }}
+            </div>
+            <div style="display:flex;align-items:center;gap:0.4rem;">
+              <span class="news-source">{{ item.source }}</span>
+              {% for t in item.tickers %}
+                <span class="ticker-chip" style="font-size:0.65rem;">{{ t }}</span>
+              {% endfor %}
+            </div>
+            <div class="news-expand" x-show="expanded" x-cloak>
+              <p style="margin-bottom:0.3rem;">{{ item.ai_summary }}</p>
+              <span class="impact-chip-inline impact-{{ item.impact_colour }}">
+                {{ item.impact_label }}
+              </span>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="text-muted" style="font-size:0.8rem;">No recent news -- connect RSS feeds in settings</p>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  {# ── Live trading confirmation modal ────────────────────────── #}
+  <template x-if="showLiveModal">
+    <div class="confirm-modal-bg" x-on:click.self="showLiveModal = false">
+      <div class="confirm-modal">
+        <h3 style="color:var(--red);margin-bottom:0.75rem;">Switch to Live Trading?</h3>
+        <p style="font-size:0.85rem;color:var(--t2);margin-bottom:1rem;">
+          This will submit real orders to your broker. Make sure your IB Gateway
+          is connected and you have reviewed all pending orders.
+        </p>
+        <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
+          <button class="btn btn-sm" x-on:click="showLiveModal = false">Cancel</button>
+          <button class="btn btn-sm" style="color:var(--red);border-color:var(--red);"
+                  hx-post="/ui/execute/toggle-mode"
+                  hx-target="#mode-badge"
+                  hx-swap="innerHTML"
+                  x-on:click="showLiveModal = false">
+            Confirm -- Go Live
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+</div>
+{% endblock %}

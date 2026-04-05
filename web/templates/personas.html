@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Personas — Quant Stack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Trading Personas</h1>
+  <p class="text-muted">Advisory research agents — each with its own mandate, budget, and strategy.</p>
+</div>
+
+{%- if error %}
+<div class="alert alert-warn" style="margin-bottom:1.5rem;">{{ error }}</div>
+{%- endif %}
+
+{#- Capital summary bar -#}
+{% if capital and capital.total_capital > 0 %}
+<div class="card" style="margin-bottom:1.5rem; padding:1rem 1.5rem;">
+  <div style="display:flex; gap:2rem; flex-wrap:wrap; align-items:center;">
+    <div>
+      <span class="text-muted" style="font-size:0.75rem;">Total Capital</span><br>
+      <strong>GBP {{ "{:,.0f}".format(capital.total_capital) }}</strong>
+    </div>
+    <div>
+      <span class="text-muted" style="font-size:0.75rem;">Allocated</span><br>
+      <strong>GBP {{ "{:,.0f}".format(capital.total_capital - capital.unallocated) }}</strong>
+    </div>
+    <div>
+      <span class="text-muted" style="font-size:0.75rem;">Unallocated</span><br>
+      <strong>GBP {{ "{:,.0f}".format(capital.unallocated) }}</strong>
+    </div>
+    <div>
+      <span class="text-muted" style="font-size:0.75rem;">Personas</span><br>
+      <strong>{{ capital.persona_count }}</strong>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{#- Persona card grid -#}
+<div class="persona-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:1.25rem;">
+  {%- for persona in personas %}
+  <div id="persona-card-{{ persona.persona_id }}">
+    {% include "partials/persona_card.html" %}
+  </div>
+  {%- else %}
+  <div class="card" style="padding:2rem; text-align:center;">
+    <p class="text-muted">No personas configured. Add a <code>personas</code> section to <code>config/settings.yaml</code>.</p>
+  </div>
+  {%- endfor %}
+</div>
+{% endblock %}

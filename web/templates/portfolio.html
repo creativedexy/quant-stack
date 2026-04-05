@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+{% block title %}Portfolio | Quant Stack{% endblock %}
+
+{% block head %}
+<style>
+/* -- Heatmap grid ----------------------------------------- */
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+.heatmap-cell {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  position: relative;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.heatmap-cell:hover { border-color: var(--border-hi); }
+.heatmap-cell.selected { border-color: var(--amber); }
+.heatmap-cell.big { grid-column: span 2; grid-row: span 2; min-height: 160px; }
+.heatmap-cell.medium { grid-column: span 2; }
+
+/* Colour intensity */
+.heatmap-cell.pos-strong { background: rgba(35,197,94,0.18); }
+.heatmap-cell.pos-mild   { background: rgba(35,197,94,0.10); }
+.heatmap-cell.neutral    { background: var(--card-bg); }
+.heatmap-cell.neg-mild   { background: rgba(239,68,68,0.10); }
+.heatmap-cell.neg-strong  { background: rgba(239,68,68,0.18); }
+
+.heatmap-ticker { font-family: var(--mono); font-weight: 600; font-size: 0.9rem; }
+.heatmap-name   { color: var(--t2); font-size: 0.7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.heatmap-return { font-family: var(--mono); font-size: 0.8rem; }
+.heatmap-weight { color: var(--t2); font-family: var(--mono); font-size: 0.7rem; }
+
+.signal-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--amber);
+  position: absolute; top: 8px; right: 8px;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* -- Portfolio layout ------------------------------------- */
+.portfolio-layout {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+.positions-zone {
+  flex: 1;
+  min-width: 0;
+}
+.dca-sidebar {
+  width: 340px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 1rem;
+}
+
+/* -- Drawer ----------------------------------------------- */
+.portfolio-drawer {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-top: 0.75rem;
+}
+
+/* -- DCA plan cards --------------------------------------- */
+.dca-plan-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+.dca-plan-card.paused { opacity: 0.6; }
+.dca-progress-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 0.5rem;
+  overflow: hidden;
+}
+.dca-progress-fill {
+  height: 100%;
+  background: var(--purple);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+.dca-new-plan {
+  border: 1px dashed var(--border-hi);
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+  cursor: pointer;
+  color: var(--t2);
+  transition: border-color 0.15s;
+}
+.dca-new-plan:hover { border-color: var(--purple); color: var(--purple); }
+
+/* -- Risk alert strip ------------------------------------- */
+.risk-alert-strip {
+  background: var(--amber-dim);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.risk-alert-strip .alert-text { flex: 1; font-size: 0.85rem; }
+.risk-alert-strip .alert-actions { display: flex; gap: 0.5rem; }
+
+/* -- Header stat cards ------------------------------------ */
+.portfolio-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.portfolio-value-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.portfolio-value {
+  font-family: var(--mono);
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.stat-cards-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.stat-card-mini {
+  text-align: center;
+  min-width: 90px;
+}
+.stat-card-mini .stat-label { font-size: 0.65rem; color: var(--t2); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card-mini .stat-value { font-family: var(--mono); font-size: 0.9rem; font-weight: 600; }
+.stat-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--border);
+}
+
+/* -- AI review grid --------------------------------------- */
+.ai-review-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+/* -- Section header --------------------------------------- */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.count-badge {
+  background: var(--border);
+  color: var(--t1);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+/* -- Status badges ---------------------------------------- */
+.status-badge {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.status-badge.active { background: var(--green-dim); color: var(--green); }
+.status-badge.paused { background: var(--amber-dim); color: var(--amber); }
+
+/* -- Action cards in drawer ------------------------------- */
+.drawer-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.action-card {
+  flex: 1;
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  display: block;
+}
+.action-card.purple { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(167,139,250,0.2); }
+.action-card.amber  { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(245,158,11,0.2); }
+.action-card.cyan   { background: var(--cyan-dim); color: var(--cyan); border: 1px solid rgba(34,211,238,0.2); }
+
+@media (max-width: 1100px) {
+  .portfolio-layout { flex-direction: column; }
+  .dca-sidebar { width: 100%; position: static; }
+  .heatmap-grid { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 700px) {
+  .heatmap-grid { grid-template-columns: repeat(2, 1fr); }
+  .heatmap-cell.big,
+  .heatmap-cell.medium { grid-column: span 1; grid-row: span 1; min-height: 80px; }
+  .ai-review-grid { grid-template-columns: 1fr; }
+  .portfolio-header { flex-direction: column; }
+  .stat-cards-row { flex-wrap: wrap; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+  {# ── Risk Alert Strip ──────────────────────────────────── #}
+  {% if risk_alert %}
+  <div class="risk-alert-strip" x-data="{ dismissed: false }" x-show="!dismissed">
+    <div class="alert-text">{{ risk_alert.message }}</div>
+    <div class="alert-actions">
+      {% for action in risk_alert.actions %}
+      <a href="{{ action.href }}" class="btn btn-sm">{{ action.label }}</a>
+      {% endfor %}
+      <button class="btn btn-sm" x-on:click="dismissed = true" aria-label="Dismiss">Dismiss</button>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Header ────────────────────────────────────────────── #}
+  <div class="portfolio-header">
+    <div class="portfolio-value-block">
+      <span class="portfolio-value"><span style="font-size:0.6em;color:var(--t2);margin-right:0.25em;">&pound;</span>{{ "{:,.2f}".format(summary.total_value) }}</span>
+      {% set pnl = summary.daily_pnl %}
+      {% set pnl_pct = summary.daily_pnl_pct %}
+      <span class="font-mono" style="font-size:0.85rem;">
+        {% if pnl >= 0 %}
+          <span class="text-green">+&pound;{{ "{:,.2f}".format(pnl) }} ({{ "%+.2f" | format(pnl_pct * 100) }}%)</span>
+        {% else %}
+          <span class="text-red">-&pound;{{ "{:,.2f}".format(pnl | abs) }} ({{ "%+.2f" | format(pnl_pct * 100) }}%)</span>
+        {% endif %}
+        today
+      </span>
+    </div>
+
+    <div class="stat-cards-row">
+      <div class="stat-card-mini">
+        <div class="stat-label">Positions</div>
+        <div class="stat-value">{{ summary.position_count }} <span class="text-muted" style="font-size:0.7rem;">/ {{ summary.sector_count }} accounts</span></div>
+      </div>
+      <div class="stat-card-mini">
+        <div class="stat-label">Best Today</div>
+        {% if summary.best_today %}
+        <div class="stat-value text-green">{{ summary.best_today.ticker }} {{ summary.best_today.return | pct | safe }}</div>
+        {% else %}
+        <div class="stat-value">--</div>
+        {% endif %}
+      </div>
+      <div class="stat-card-mini">
+        <div class="stat-label">Worst Today</div>
+        {% if summary.worst_today %}
+        <div class="stat-value text-red">{{ summary.worst_today.ticker }} {{ summary.worst_today.return | pct | safe }}</div>
+        {% else %}
+        <div class="stat-value">--</div>
+        {% endif %}
+      </div>
+
+      <div class="stat-divider"></div>
+
+      <div class="stat-card-mini">
+        <div class="stat-label">Monthly DCA</div>
+        <div class="stat-value" style="color:var(--purple);">{{ dca_summary.monthly_total | gbp }}</div>
+      </div>
+      <div class="stat-card-mini">
+        <div class="stat-label">Total Invested</div>
+        <div class="stat-value">{{ dca_summary.total_invested | gbp }}</div>
+      </div>
+      <div class="stat-card-mini">
+        <div class="stat-label">DCA Return</div>
+        <div class="stat-value">{{ dca_summary.avg_return | pct | safe }}</div>
+      </div>
+      <div class="stat-card-mini">
+        <div class="stat-label">Next Payment</div>
+        <div class="stat-value font-mono" style="font-size:0.75rem;">{{ dca_summary.next_payment_date }}</div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Layout ───────────────────────────────────────────── #}
+  <div class="portfolio-layout" x-data="{ selectedTicker: '' }">
+
+    {# ── LEFT: Positions Zone ────────────────────────────── #}
+    <div class="positions-zone">
+      <div class="section-header">
+        <h3>Your Positions</h3>
+        <span class="count-badge">{{ heatmap | length }}</span>
+      </div>
+
+      {# Heatmap grid — grouped by account #}
+      {% set ns = namespace(current_account='') %}
+      {% for pos in heatmap %}
+        {% if pos.account != ns.current_account %}
+          {% if ns.current_account != '' %}
+            </div>{# close previous heatmap-grid #}
+          {% endif %}
+          {% set ns.current_account = pos.account %}
+          <div class="section-header" style="margin-top:{% if loop.first %}0{% else %}1.25rem{% endif %};">
+            <h4 style="font-size:0.85rem;font-weight:600;color:var(--t2);">{{ pos.account }}</h4>
+            <span class="count-badge">{{ heatmap | selectattr('account', 'equalto', pos.account) | list | length }}</span>
+          </div>
+          <div class="heatmap-grid">
+        {% endif %}
+        <div class="heatmap-cell {{ pos.cell_size }} {{ pos.colour_class }}"
+             hx-get="/ui/portfolio/drawer?ticker={{ pos.ticker }}"
+             hx-target="#portfolio-drawer"
+             hx-swap="innerHTML"
+             x-on:click="selectedTicker = '{{ pos.ticker }}'"
+             x-bind:class="selectedTicker === '{{ pos.ticker }}' ? 'selected' : ''">
+          {% if pos.has_signal %}<div class="signal-dot" title="Active signal"></div>{% endif %}
+          <div>
+            <div class="heatmap-ticker">{{ pos.ticker }}</div>
+            <div class="heatmap-name">{{ pos.name }}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-end;">
+            <span class="heatmap-return {% if pos.daily_return >= 0 %}text-green{% else %}text-red{% endif %}">
+              {{ "%+.2f" | format(pos.daily_return * 100) }}%
+            </span>
+            <span class="heatmap-weight">{{ "%.1f" | format(pos.weight * 100) }}%</span>
+          </div>
+        </div>
+      {% endfor %}
+      {% if heatmap %}
+        </div>{# close last heatmap-grid #}
+      {% endif %}
+
+      {# Inline drawer (hidden until a cell is clicked) #}
+      <div id="portfolio-drawer"></div>
+
+      {# AI Portfolio Review #}
+      <div style="margin-top:1.25rem;">
+        <button class="btn"
+                hx-post="/ui/portfolio/ai-review"
+                hx-target="#ai-review-container"
+                hx-swap="innerHTML"
+                hx-indicator="#ai-review-spinner">
+          Get AI Portfolio Review
+        </button>
+        <span id="ai-review-spinner" class="spinner htmx-indicator" style="margin-left:0.5rem;"></span>
+        <div id="ai-review-container"></div>
+      </div>
+    </div>
+
+    {# ── RIGHT: DCA Sidebar ──────────────────────────────── #}
+    <div class="dca-sidebar">
+      <h3 style="margin-bottom:0.25rem;">Your Plans</h3>
+      <p class="text-muted" style="font-size:0.75rem;margin-bottom:0.75rem;">
+        Regular investing schedules for your portfolio
+      </p>
+
+      {% for plan in dca_plans %}
+      <div class="dca-plan-card{% if plan.status == 'PAUSED' %} paused{% endif %}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+          <div>
+            <span class="font-mono" style="font-weight:600;">{{ plan.ticker }}</span>
+            <span class="text-muted" style="font-size:0.75rem;margin-left:0.25rem;">{{ plan.name }}</span>
+          </div>
+          <span class="status-badge {% if plan.status == 'ACTIVE' %}active{% else %}paused{% endif %}">
+            {{ plan.status }}
+          </span>
+        </div>
+        <div class="text-muted" style="font-size:0.8rem;">
+          Investing {{ plan.amount | gbp }} every {{ plan.frequency }} on the {{ plan.day }}{{ 'st' if plan.day == 1 else ('nd' if plan.day == 2 else ('rd' if plan.day == 3 else 'th')) }}
+        </div>
+        {% if plan.target and plan.target > 0 %}
+        <div class="dca-progress-bar">
+          <div class="dca-progress-fill" style="width: {{ ((plan.invested / plan.target) * 100) | int }}%;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:0.25rem;">
+          <span class="text-muted" style="font-size:0.7rem;">{{ plan.invested | gbp }} / {{ plan.target | gbp }}</span>
+          <span class="text-muted" style="font-size:0.7rem;">{{ ((plan.invested / plan.target) * 100) | int }}%</span>
+        </div>
+        {% endif %}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem;">
+          <span class="text-muted" style="font-size:0.7rem;">Next: {{ plan.next_date }}</span>
+          <div style="display:flex;gap:0.25rem;">
+            {% if plan.status == 'ACTIVE' %}
+            <button class="btn btn-sm" style="font-size:0.7rem;">Pause</button>
+            {% else %}
+            <button class="btn btn-sm" style="font-size:0.7rem;">Resume</button>
+            {% endif %}
+            <button class="btn btn-sm" style="font-size:0.7rem;">Edit</button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+
+      <div class="dca-new-plan">+ Start a New Plan</div>
+    </div>
+  </div>
+{% endblock %}

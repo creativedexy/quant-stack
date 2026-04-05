@@ -1,0 +1,13 @@
+{# AI portfolio review cards -- returned by POST /ui/portfolio/ai-review.
+   Expects: insights (list of dicts with colour, icon_svg, title, text, chips)
+#}
+<div class="ai-review-grid">
+  {% for card in insights %}
+  {%- set colour = card.colour | default('amber') -%}
+  {%- set icon_svg = card.icon_svg | default('') -%}
+  {%- set title = card.title | default('') -%}
+  {%- set text = card.text | default('') -%}
+  {%- set chips = card.chips | default([]) -%}
+  {% include "partials/ai_card.html" %}
+  {% endfor %}
+</div>

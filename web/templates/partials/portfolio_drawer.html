@@ -1,0 +1,68 @@
+{# Portfolio drawer partial -- loaded via HTMX when a heatmap cell is clicked.
+   Expects: pos (dict), signal_label (str), summary_text (str),
+            news_context (str|None)
+#}
+<div class="portfolio-drawer">
+  {# Header: name + ticker #}
+  <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+    <div>
+      <div style="font-weight:600;font-size:1rem;">{{ pos.name }}</div>
+      <span class="font-mono text-muted" style="font-size:0.8rem;">{{ pos.ticker }}</span>
+    </div>
+  </div>
+
+  {# Plain English summary #}
+  <p style="font-size:0.85rem;line-height:1.6;margin-bottom:1rem;color:var(--t1);">
+    {{ summary_text }}
+  </p>
+
+  {# Three stat cards #}
+  <div style="display:flex;gap:0.75rem;margin-bottom:1rem;">
+    <div class="card" style="flex:1;padding:0.75rem;text-align:center;">
+      <div class="text-muted" style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;">Your Return</div>
+      <div class="font-mono" style="font-size:1rem;font-weight:600;">
+        {{ pos.total_return | pct | safe }}
+      </div>
+    </div>
+    <div class="card" style="flex:1;padding:0.75rem;text-align:center;">
+      <div class="text-muted" style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;">Portfolio Share</div>
+      <div class="font-mono" style="font-size:1rem;font-weight:600;">
+        {{ "%.1f" | format(pos.weight * 100) }}%
+      </div>
+    </div>
+    <div class="card" style="flex:1;padding:0.75rem;text-align:center;">
+      <div class="text-muted" style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;">Value</div>
+      <div class="font-mono" style="font-size:1rem;font-weight:600;">
+        {{ pos.market_value | gbp }}
+      </div>
+    </div>
+  </div>
+
+  {# Signal badge #}
+  <div style="margin-bottom:0.75rem;">
+    <span class="text-muted" style="font-size:0.75rem;">Model says:</span>
+    <span class="signal-badge
+      {%- if signal_label == 'Looking Good' %} signal-badge-positive
+      {%- elif signal_label == 'Be Careful' %} signal-badge-negative
+      {%- elif signal_label == 'Steady' %} signal-badge-steady
+      {%- else %} signal-badge-neutral
+      {%- endif %}"
+      style="margin-left:0.5rem;">
+      {{ signal_label }}
+    </span>
+  </div>
+
+  {# News context (only if present) #}
+  {% if news_context %}
+  <div style="border-left:3px solid var(--amber);padding:0.5rem 0.75rem;margin-bottom:0.75rem;background:var(--amber-dim);border-radius:0 4px 4px 0;font-size:0.8rem;">
+    {{ news_context }}
+  </div>
+  {% endif %}
+
+  {# Action cards #}
+  <div class="drawer-actions">
+    <a class="action-card purple" href="/ui/portfolio?tab=dca">Add to DCA</a>
+    <a class="action-card amber" href="/ui/execution">Set Alert</a>
+    <a class="action-card cyan" href="/ui/analyse?ticker={{ pos.ticker }}">Analyse</a>
+  </div>
+</div>

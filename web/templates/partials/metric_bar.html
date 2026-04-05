@@ -1,0 +1,14 @@
+{# Metrics bar — HTMX-swappable fragment.
+   Rendered both as an include and as a standalone partial
+   for hx-get polling in Session 11.
+#}
+<div class="metrics-bar" id="metrics-bar">
+  {% for metric in metrics %}
+  <div class="card">
+    <div class="metric-label">{{ metric.label }}</div>
+    <div class="metric-value {% if metric.css_class %}{{ metric.css_class }}{% endif %}">
+      {{ metric.value }}
+    </div>
+  </div>
+  {% endfor %}
+</div>

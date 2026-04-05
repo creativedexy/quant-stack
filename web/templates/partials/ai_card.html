@@ -1,0 +1,27 @@
+{# AI insight card partial -- reusable component.
+   Expects: colour (green/red/amber/purple/cyan),
+            icon_svg (inline SVG string),
+            title (string),
+            text (string),
+            chips (optional list of {label, colour} dicts)
+#}
+<div class="ai-card ai-card-{{ colour | default('amber') }}">
+  <div style="display:flex;align-items:flex-start;gap:0.75rem;">
+    {# Icon circle #}
+    <div class="ai-card-icon">
+      {% if icon_svg %}{{ icon_svg | safe }}{% else %}?{% endif %}
+    </div>
+    {# Content #}
+    <div style="flex:1;min-width:0;">
+      <div style="font-weight:600;font-size:0.9rem;margin-bottom:0.25rem;">{{ title }}</div>
+      <div class="text-muted" style="font-size:0.8rem;line-height:1.55;">{{ text }}</div>
+      {% if chips %}
+      <div style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-top:0.5rem;">
+        {% for c in chips %}
+        <span class="chip chip-{{ c.colour | default('cyan') }}">{{ c.label }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>

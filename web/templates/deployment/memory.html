@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Deployment Memory | Quant Stack{% endblock %}
+
+{% block head %}
+<style>
+  .mem-section {
+    background: var(--card); border-radius: 8px; padding: 1.25rem;
+    border: 1px solid var(--border); margin-bottom: 1rem;
+  }
+  .mem-section h3 { margin: 0 0 0.75rem; font-size: 1rem; }
+  .mem-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem; margin-bottom: 1.25rem;
+  }
+  .mem-stat {
+    background: var(--card); border-radius: 8px; padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+  }
+  .mem-stat-label {
+    font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .mem-stat-value {
+    font-family: 'IBM Plex Mono', monospace; font-size: 1.2rem; font-weight: 600;
+  }
+  .ticker-chip {
+    display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px;
+    font-size: 0.75rem; font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500; margin: 0.15rem;
+  }
+  .ticker-watch { background: rgba(0,150,255,0.12); color: var(--cyan); }
+  .ticker-excluded { background: rgba(255,80,80,0.12); color: var(--red); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem;">
+    <div>
+      <h1 style="font-size:1.5rem; margin:0;">Deployment Memory</h1>
+      <p style="color:var(--text-muted); font-size:0.85rem; margin:0.25rem 0 0;">
+        Learning history, watchlist, exclusions, and cost tracking
+      </p>
+    </div>
+    <a href="/ui/execute/deployment"
+       class="btn"
+       style="background:var(--card-alt); padding:0.5rem 1rem; border-radius:6px; text-decoration:none; font-size:0.85rem;">
+      Back to Dashboard
+    </a>
+  </div>
+
+  {#- Cost summary -#}
+  <div class="mem-grid">
+    <div class="mem-stat">
+      <div class="mem-stat-label">Total Cycles</div>
+      <div class="mem-stat-value">{{ summary.total_cycles }}</div>
+    </div>
+    <div class="mem-stat">
+      <div class="mem-stat-label">Total Opus Tokens</div>
+      <div class="mem-stat-value">
+        {{ "{:,}".format((cost.total_input_tokens|default(0)) + (cost.total_output_tokens|default(0))) }}
+      </div>
+    </div>
+    <div class="mem-stat">
+      <div class="mem-stat-label">Estimated Cost</div>
+      <div class="mem-stat-value">
+        &pound;{{ "%.2f"|format(cost.estimated_gbp_total|default(0)) }}
+      </div>
+    </div>
+    <div class="mem-stat">
+      <div class="mem-stat-label">Cost Per Cycle</div>
+      <div class="mem-stat-value">
+        {% if cost.cost_per_cycle_avg|default(0) %}
+          &pound;{{ "%.2f"|format(cost.cost_per_cycle_avg|default(0)) }}
+        {% else %}
+          --
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {#- Watchlist -#}
+  <div class="mem-section">
+    <h3>Watchlist</h3>
+    <p style="font-size:0.8rem; color:var(--text-muted); margin:0 0 0.5rem;">
+      High-scoring candidates that were rejected -- worth reviewing next cycle.
+    </p>
+    {% if watchlist %}
+      {% for ticker in watchlist %}
+        <span class="ticker-chip ticker-watch">{{ ticker }}</span>
+      {% endfor %}
+    {% else %}
+      <p style="color:var(--text-muted); font-size:0.85rem; margin:0;">No tickers on watchlist.</p>
+    {% endif %}
+  </div>
+
+  {#- Excluded tickers -#}
+  <div class="mem-section">
+    <h3>Active Exclusions</h3>
+    <p style="font-size:0.8rem; color:var(--text-muted); margin:0 0 0.5rem;">
+      Tickers on cooldown (rejected in recent cycles).
+    </p>
+    {% if excluded %}
+      {% for ticker in excluded %}
+        <span class="ticker-chip ticker-excluded">{{ ticker }}</span>
+      {% endfor %}
+    {% else %}
+      <p style="color:var(--text-muted); font-size:0.85rem; margin:0;">No active exclusions.</p>
+    {% endif %}
+  </div>
+
+  {#- Sector trends -#}
+  <div class="mem-section">
+    <h3>Sector Trends</h3>
+    {% if sector_trends %}
+      <div style="font-size:0.85rem;">
+        {% for sector, data in sector_trends.items() %}
+        <div style="display:flex; justify-content:space-between; padding:0.35rem 0; border-bottom:1px solid var(--border);">
+          <span>{{ sector }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;">
+            avg {{ "%.2f"|format(data.avg_score) if data.avg_score is defined else '--' }}
+            &middot; {{ data.count if data.count is defined else 0 }} candidates
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p style="color:var(--text-muted); font-size:0.85rem; margin:0;">No sector trends recorded yet.</p>
+    {% endif %}
+  </div>
+
+  {#- Last cycle ID -#}
+  <div class="mem-section">
+    <h3>Last Cycle</h3>
+    <p style="font-family:'IBM Plex Mono',monospace; font-size:0.85rem; margin:0;">
+      {{ summary.last_cycle_id or 'No cycles run yet' }}
+    </p>
+  </div>
+</div>
+{% endblock %}

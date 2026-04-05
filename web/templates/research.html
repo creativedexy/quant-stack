@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Research | Quant Stack{% endblock %}
+
+{% block content %}
+  {#- ── Trading Personas ──────────────────────────────── -#}
+  {% if personas %}
+  <div style="margin-bottom: 2rem;">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:0.75rem;">
+      <h2 style="margin:0;">Trading Personas</h2>
+      <span class="text-muted" style="font-size:0.75rem;">Advisory research agents</span>
+    </div>
+
+    <div class="persona-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:1rem;">
+      {%- for persona in personas %}
+      <div id="persona-card-{{ persona.persona_id }}">
+        {% include "partials/persona_card.html" %}
+      </div>
+      {%- endfor %}
+    </div>
+  </div>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin-bottom:1.5rem;">
+  {% endif %}
+
+  {#- ── Research Log ──────────────────────────────────── -#}
+  <h2 style="margin-top:0;">Research Log</h2>
+
+  <div class="research-grid">
+    {# Left panel: filter + entry list #}
+    <div class="card research-sidebar">
+      {# Filter bar #}
+      <div style="margin-bottom: 0.75rem;">
+        <label class="muted" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
+          Filter by notebook
+        </label>
+        <select class="filter-select"
+                aria-label="Filter by notebook"
+                hx-get="/ui/partials/research-entries"
+                hx-target="#research-entries"
+                hx-swap="innerHTML"
+                name="notebook">
+          <option value="">All notebooks</option>
+          {% for nb in notebooks %}
+            <option value="{{ nb }}" {% if nb == active_filter %}selected{% endif %}>{{ nb }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {# Entry list #}
+      <div id="research-entries">
+        {% include "partials/research_entries.html" %}
+      </div>
+    </div>
+
+    {# Right panel: entry detail #}
+    <div class="card research-main" id="research-detail">
+      <p class="skeleton-text">Select an entry to view details</p>
+    </div>
+  </div>
+{% endblock %}

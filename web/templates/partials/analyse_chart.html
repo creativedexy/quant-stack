@@ -1,0 +1,78 @@
+{# Chart fragment -- toolbar + Plotly chart, swapped via HTMX #}
+
+{# Overlay toolbar #}
+<div class="card" style="display:flex;align-items:center;gap:0.35rem;padding:0.4rem 0.75rem;">
+  {% for ov, label, dot_colour in [
+    ('bollinger', 'Bollinger', 'var(--amber)'),
+    ('rsi', 'RSI', 'var(--cyan)'),
+    ('macd', 'MACD', 'var(--amber)'),
+    ('ml', 'ML Signal', 'var(--green)'),
+    ('monte_carlo', 'Monte Carlo', 'var(--purple)'),
+  ] %}
+  <button class="btn btn-sm overlay-btn{% if ov in overlays %} active{% endif %}"
+          hx-get="/ui/analyse/chart?ticker={{ ticker }}&period={{ period }}&overlays={% if ov in overlays %}{{ overlays | reject('equalto', ov) | join(',') }}{% else %}{{ (overlays + [ov]) | join(',') }}{% endif %}&log_scale={{ 1 if log_scale else 0 }}"
+          hx-target="#chart-zone"
+          hx-swap="innerHTML">
+    <span class="ov-dot" style="background:{{ dot_colour }};"></span>
+    {{ label }}
+  </button>
+  {% endfor %}
+
+  <button class="btn btn-sm overlay-btn{% if log_scale %} active{% endif %}"
+          hx-get="/ui/analyse/chart?ticker={{ ticker }}&period={{ period }}&overlays={{ overlays | join(',') }}&log_scale={% if log_scale %}0{% else %}1{% endif %}"
+          hx-target="#chart-zone"
+          hx-swap="innerHTML"
+          style="margin-left:auto;">
+    Log
+  </button>
+</div>
+
+{# Plotly chart #}
+<div class="card" style="padding:0;overflow:hidden;">
+  <div id="analyse-chart" style="width:100%;height:600px;"></div>
+</div>
+
+<script>
+  renderAnalyseChart('analyse-chart', {{ chart_json | tojson }});
+
+  // Plotly may render at the wrong width before flex layout settles.
+  // Force a resize once the container has its final dimensions.
+  requestAnimationFrame(function() {
+    var el = document.getElementById('analyse-chart');
+    if (el && window.Plotly) Plotly.Plots.resize(el);
+  });
+
+  // Sync period button URLs with current overlay/log_scale state.
+  (function() {
+    var overlays = {{ overlays | tojson }};
+    var logScale = {{ 1 if log_scale else 0 }};
+    var suffix = '&overlays=' + overlays.join(',') + '&log_scale=' + logScale;
+    // Period buttons are outside the swap zone -- update them to carry
+    // the current overlay and log_scale state.
+    document.querySelectorAll('[hx-get^="/ui/analyse/chart?"][hx-target="#chart-zone"]').forEach(function(btn) {
+      var href = btn.getAttribute('hx-get');
+      if (!href) return;
+      // Skip overlay buttons (they live inside chart-zone and manage their own state).
+      if (btn.closest('#chart-zone')) return;
+      // Strip any previous overlay/log_scale params and rebuild.
+      var base = href.split('&overlays')[0].split('&log_scale')[0];
+      btn.setAttribute('hx-get', base + suffix);
+      htmx.process(btn);
+    });
+  })();
+</script>
+
+{# Learn strips #}
+{% if learn_strips %}
+<div class="card" style="padding:0.5rem 0.75rem;">
+  {% for strip in learn_strips %}
+  <div style="display:flex;align-items:baseline;gap:0.5rem;padding:0.35rem 0;">
+    <span style="width:8px;height:8px;border-radius:50%;background:{{ strip.dot_colour | default('var(--amber)') }};flex-shrink:0;position:relative;top:1px;"></span>
+    <span style="font-size:0.8rem;font-weight:600;white-space:nowrap;">{{ strip.name }}</span>
+    <span class="text-muted" style="font-size:0.75rem;">{{ strip.explanation }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div id="forensic-panel"></div>

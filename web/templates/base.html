@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Quant Stack{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/theme.css?v={{ css_v }}">
+  <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+  <script src="/static/js/charts.js"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js"></script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {#- LSE market status -- lse_market is a callable global injected by ui.py -#}
+  {% if lse_market is defined %}
+    {% set _lse = lse_market() %}
+  {% else %}
+    {% set _lse = {'lse_open': false, 'lse_time': ''} %}
+  {% endif %}
+  {% macro lse_status(_lse) -%}
+    {%- if _lse.lse_open -%}
+      <span class="text-green font-mono" style="font-size:0.75rem;">LSE {{ _lse.lse_time }} OPEN</span>
+    {%- else -%}
+      <span class="text-muted font-mono" style="font-size:0.75rem;">LSE CLOSED</span>
+    {%- endif -%}
+  {%- endmacro %}
+
+  <nav class="top-nav" aria-label="Main navigation" x-data="{ navOpen: false }">
+    <div class="top-nav-inner">
+      <a class="nav-brand" href="/ui/overview">Quant Stack</a>
+      <button class="nav-toggle" aria-label="Toggle navigation" x-on:click="navOpen = !navOpen">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+      </button>
+      <div class="nav-links" x-bind:class="navOpen && 'nav-links-open'">
+        {%- set tabs = [
+          ('dashboard', 'Dashboard', '/ui/overview'),
+          ('watchlist', 'Watchlist', '/ui/watchlist'),
+          ('portfolio', 'Portfolio', '/ui/portfolio'),
+          ('research',  'Research',  '/ui/research'),
+          ('analyse',   'Analyse',   '/ui/analyse'),
+          ('execute',   'Execute',   '/ui/execute/deployment'),
+        ] -%}
+        {#- Map old page names and URL paths to tab keys for backwards compat -#}
+        {%- set _path_map = {
+          '/ui/overview': 'dashboard', '/ui/strategy': 'analyse',
+          '/ui/watchlist': 'watchlist', '/ui/chart': 'analyse',
+          '/ui/portfolio': 'portfolio', '/ui/research': 'research',
+          '/ui/analyse': 'analyse', '/ui/execution': 'execute', '/ui/execute': 'execute',
+          '/ui/execute/deployment': 'execute', '/ui/execute/deployment/queue': 'execute',
+          '/ui/execute/deployment/checkpoint': 'execute', '/ui/execute/deployment/memory': 'execute',
+          '/ui/personas': 'research', '/ui/news': 'dashboard',
+        } -%}
+        {%- set _page_map = {
+          'overview': 'dashboard', 'strategy': 'analyse',
+          'watchlist': 'watchlist', 'chart': 'analyse',
+          'portfolio': 'portfolio', 'research': 'research',
+          'analyse': 'analyse', 'execution': 'execute',
+          'personas': 'research', 'news': 'dashboard', 'execute': 'execute',
+          'dashboard': 'dashboard',
+        } -%}
+        {#- Resolve which nav tab to highlight. active_page is the primary
+            signal from route handlers; active_tab and URL path are fallbacks. -#}
+        {%- if active_page is defined and active_page in _page_map -%}
+          {%- set _resolved_tab = _page_map[active_page] -%}
+        {%- elif active_tab is defined and active_tab in _page_map -%}
+          {%- set _resolved_tab = _page_map[active_tab] -%}
+        {%- elif request is defined and request.url is defined -%}
+          {%- set _resolved_tab = _path_map.get(request.url.path, '') -%}
+        {%- else -%}
+          {%- set _resolved_tab = '' -%}
+        {%- endif -%}
+        {% for key, label, href in tabs %}
+        <a class="nav-link{% if _resolved_tab == key %} active{% endif %}"
+           href="{{ href }}">{{ label }}
+          {%- if tab_statuses is defined and tab_statuses[key] is defined -%}
+            {%- if tab_statuses[key] == 'live' %} <span class="dot-live"></span>
+            {%- elif tab_statuses[key] == 'action' %} <span class="dot-action"></span>
+            {%- else %} <span class="dot-idle"></span>
+            {%- endif -%}
+          {%- endif -%}
+        </a>
+        {% endfor %}
+      </div>
+      <div class="nav-actions" x-data="{ actionsOpen: false }">
+        <button class="btn-actions" x-on:click="actionsOpen = !actionsOpen"
+                x-on:click.outside="actionsOpen = false">
+          + Actions
+        </button>
+        <div class="actions-dropdown" x-show="actionsOpen" x-cloak x-transition>
+          <button class="actions-item"
+                  hx-get="/ui/partials/modal-upload-research"
+                  hx-target="#modal-container"
+                  x-on:click="actionsOpen = false">
+            Upload Research
+          </button>
+          <button class="actions-item"
+                  hx-get="/ui/partials/modal-import-purchases"
+                  hx-target="#modal-container"
+                  x-on:click="actionsOpen = false">
+            Import Purchases (CSV)
+          </button>
+          <button class="actions-item"
+                  hx-get="/ui/partials/modal-add-purchase"
+                  hx-target="#modal-container"
+                  x-on:click="actionsOpen = false">
+            Add Purchase
+          </button>
+        </div>
+      </div>
+      <div style="margin-left:auto;">
+        {{ lse_status(_lse) }}
+      </div>
+    </div>
+  </nav>
+
+  {# Modal container -- HTMX loads modal partials here #}
+  <div id="modal-container" onclick="if(event.target===this)this.innerHTML=''"></div>
+
+  {% block ticker_bar %}{% endblock %}
+
+  <main class="container page-content" role="main">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% block chartlibs %}{% endblock %}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

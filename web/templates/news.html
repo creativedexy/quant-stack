@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}News — Quant Stack{% endblock %}
+
+{% block content %}
+<div class="news-layout">
+
+  <!-- Sidebar -->
+  <div class="news-sidebar">
+
+    <!-- Ticker filter chips -->
+    <div class="card">
+      <h4 class="muted news-sidebar-heading">Filter by Ticker</h4>
+      <div class="chip-group">
+        <button
+          class="chip {% if active_ticker == 'all' %}chip-active{% endif %}"
+          hx-get="/ui/news/feed?ticker=all"
+          hx-target="#news-feed"
+          hx-swap="innerHTML">All</button>
+        {% for t in tickers %}
+        <button
+          class="chip {% if active_ticker == t %}chip-active{% endif %}"
+          hx-get="/ui/news/feed?ticker={{ t }}"
+          hx-target="#news-feed"
+          hx-swap="innerHTML">{{ t.replace('.L', '') }}</button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Sentiment filter -->
+    <div class="card">
+      <h4 class="muted news-sidebar-heading">Sentiment</h4>
+      <div class="news-filter-col">
+        {% for s in ['bullish', 'bearish', 'mixed', 'neutral'] %}
+        <label class="news-filter-label">
+          <input type="checkbox"
+                 name="sentiment"
+                 value="{{ s }}"
+                 {% if s in active_sentiments %}checked{% endif %}
+                 hx-get="/ui/news/feed?ticker={{ active_ticker }}"
+                 hx-target="#news-feed"
+                 hx-swap="innerHTML"
+                 hx-include="[name='sentiment']:checked">
+          <span style="text-transform:capitalize;">{{ s }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Today's counts -->
+    <div class="card">
+      <h4 class="muted news-sidebar-heading">Today's Counts</h4>
+      <div class="news-counts-col">
+        <div class="news-counts-row">
+          <span class="muted">Total</span>
+          <span>{{ counts.total }}</span>
+        </div>
+        <div class="news-counts-row">
+          <span class="muted">Relevant</span>
+          <span>{{ counts.relevant }}</span>
+        </div>
+        <div class="news-counts-row">
+          <span class="muted">Bullish</span>
+          <span class="text-positive">{{ counts.bullish }}</span>
+        </div>
+        <div class="news-counts-row">
+          <span class="muted">Bearish</span>
+          <span class="text-negative">{{ counts.bearish }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sentiment by ticker -->
+    <div class="card">
+      <h4 class="muted news-sidebar-heading">Sentiment by Ticker</h4>
+      <table class="news-ticker-table">
+        {% for ts in ticker_sentiments %}
+        <tr>
+          <td>{{ ts.ticker.replace('.L', '') }}</td>
+          <td>
+            {% set s = ts.sentiment %}
+            <span class="sentiment-chip sentiment-{{ s }}">{{ s | capitalize }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+
+  </div>
+
+  <!-- Main news stream -->
+  <div class="news-main">
+    <div class="news-header">
+      <h2>News Feed</h2>
+      <span class="muted news-refresh-hint">Auto-refresh every {{ (refresh_seconds / 60) | int }} min</span>
+    </div>
+
+    <div id="news-feed"
+         hx-get="/ui/news/feed?ticker={{ active_ticker }}"
+         hx-trigger="every {{ refresh_seconds }}s"
+         hx-swap="innerHTML"
+         hx-target="this">
+      {% include "partials/news_feed.html" %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

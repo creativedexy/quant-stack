@@ -1,0 +1,32 @@
+<div class="card chart-sub-panel">
+  <h4 class="chart-panel-title">ML Confidence</h4>
+  <svg class="chart-svg chart-svg-sm" viewBox="0 0 900 100" preserveAspectRatio="none">
+    <!-- Threshold lines -->
+    <line x1="40" y1="40" x2="860" y2="40"
+          stroke="var(--positive)" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.3" />
+    <line x1="40" y1="60" x2="860" y2="60"
+          stroke="var(--negative)" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.3" />
+    <line x1="40" y1="50" x2="860" y2="50"
+          stroke="var(--muted-line)" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.3" />
+
+    {% if ml_data.confidence %}
+    {% set conf_pts = to_svg_points(ml_data.dates, ml_data.confidence, 900, 100) %}
+    {% if conf_pts %}
+    <polyline points="{{ conf_pts }}"
+              fill="none" stroke="var(--accent)" stroke-width="1.2"
+              stroke-linejoin="round" stroke-linecap="round" />
+    {% endif %}
+    {% else %}
+    <text x="450" y="55" text-anchor="middle" fill="var(--muted)" font-size="12">
+      No ML confidence data available
+    </text>
+    {% endif %}
+
+    <!-- Y-axis labels -->
+    <text x="35" y="10" text-anchor="end" fill="var(--muted)" font-size="9">1.0</text>
+    <text x="35" y="43" text-anchor="end" fill="var(--positive)" font-size="9">0.6</text>
+    <text x="35" y="53" text-anchor="end" fill="var(--muted)" font-size="9">0.5</text>
+    <text x="35" y="63" text-anchor="end" fill="var(--negative)" font-size="9">0.4</text>
+    <text x="35" y="98" text-anchor="end" fill="var(--muted)" font-size="9">0.0</text>
+  </svg>
+</div>

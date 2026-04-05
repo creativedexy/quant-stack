@@ -1,0 +1,41 @@
+{# Single research entry detail -- loaded via HTMX #}
+{% if entry %}
+<div class="research-entry-detail">
+  <h3>{{ entry.notebook }}</h3>
+  <p class="muted" style="font-size: 0.8rem; margin-bottom: 0.5rem;">
+    {{ entry.date }}{% if entry.task %} &mdash; {{ entry.task }}{% endif %}
+  </p>
+
+  {% if entry.summary %}
+  <div style="margin-bottom: 1rem;">
+    <h4 class="muted" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Summary</h4>
+    <p>{{ entry.summary }}</p>
+  </div>
+  {% endif %}
+
+  {% if entry.details %}
+  <div style="margin-bottom: 1rem;">
+    <h4 class="muted" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Details</h4>
+    <pre class="font-mono" style="white-space: pre-wrap; font-size: 0.85rem;">{{ entry.details }}</pre>
+  </div>
+  {% endif %}
+
+  {% if entry.metrics %}
+  <div>
+    <h4 class="muted" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Metrics</h4>
+    <table class="feature-table">
+      <tbody>
+        {% for key, value in entry.metrics.items() %}
+        <tr>
+          <td class="muted">{{ key }}</td>
+          <td class="text-right font-mono">{{ value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<p class="skeleton-text">Entry not found</p>
+{% endif %}

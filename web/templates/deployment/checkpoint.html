@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Checkpoint Review | Quant Stack{% endblock %}
+
+{% block head %}
+<style>
+  .candidate-card {
+    background: var(--card); border-radius: 8px; padding: 1.25rem;
+    border: 1px solid var(--border); margin-bottom: 1rem;
+  }
+  .candidate-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;
+  }
+  .candidate-ticker {
+    font-family: 'IBM Plex Mono', monospace; font-size: 1.1rem; font-weight: 600;
+  }
+  .candidate-name {
+    color: var(--text-muted); font-size: 0.85rem; margin-left: 0.5rem;
+  }
+  .conviction-badge {
+    display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em;
+  }
+  .conviction-HIGH { background: rgba(0,200,150,0.15); color: var(--green); }
+  .conviction-MEDIUM { background: rgba(255,180,0,0.15); color: var(--amber); }
+  .conviction-LOW { background: rgba(255,80,80,0.15); color: var(--red); }
+  .score-row {
+    display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;
+    font-size: 0.8rem;
+  }
+  .score-label { width: 110px; color: var(--text-muted); }
+  .score-bar-bg {
+    flex: 1; height: 8px; background: var(--card-alt); border-radius: 4px;
+    overflow: hidden;
+  }
+  .score-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .score-value {
+    width: 40px; text-align: right; font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+  }
+  .reasoning-block {
+    background: var(--card-alt); border-radius: 6px; padding: 0.75rem;
+    margin-top: 0.75rem; font-size: 0.8rem; line-height: 1.5;
+  }
+  .risk-tag {
+    display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px;
+    font-size: 0.7rem; background: rgba(255,80,80,0.1); color: var(--red);
+    margin: 0.15rem 0.15rem 0 0;
+  }
+  .candidate-actions {
+    display: flex; gap: 0.5rem; margin-top: 0.75rem;
+  }
+  .bulk-actions {
+    display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap;
+    align-items: center;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" id="deployment-content">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem;">
+    <div>
+      <h1 style="font-size:1.5rem; margin:0 0 0.25rem;">Candidate Analysis</h1>
+      <p style="color:var(--text-muted); font-size:0.85rem; margin:0;">
+        {{ candidates|length }} scored candidates — scores, reasoning, and risk factors.
+      </p>
+    </div>
+    <a href="/ui/execute/deployment" style="color:var(--cyan); font-size:0.85rem; text-decoration:none;">
+      &larr; Back to Dashboard
+    </a>
+  </div>
+
+  {#- Bulk actions -#}
+  <div class="bulk-actions">
+    <button
+      hx-post="/ui/execute/deployment/checkpoint/approve-all"
+      hx-target="#deployment-content"
+      hx-swap="innerHTML"
+      class="btn"
+      style="background:var(--green); color:#000; font-weight:600; padding:0.5rem 1rem; border-radius:6px;"
+    >
+      Approve All
+    </button>
+    <button
+      hx-post="/ui/execute/deployment/checkpoint/proceed"
+      hx-target="#deployment-content"
+      hx-swap="innerHTML"
+      class="btn"
+      style="background:var(--cyan); color:#000; font-weight:600; padding:0.5rem 1rem; border-radius:6px;"
+    >
+      Proceed to Sizing
+    </button>
+    <span style="color:var(--text-muted); font-size:0.8rem;">
+      {{ candidates|selectattr('approved', 'true')|list|length if candidates and candidates[0] is mapping and 'approved' in candidates[0] else '?' }} approved
+    </span>
+  </div>
+
+  {#- Candidate cards -#}
+  {% for c in candidates %}
+  <div class="candidate-card" id="candidate-{{ c.ticker }}">
+    <div class="candidate-header">
+      <div>
+        <span class="candidate-ticker">{{ c.ticker }}</span>
+        <span class="candidate-name">{{ c.name }} &middot; {{ c.exchange }} &middot; {{ c.sector }}</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <span class="conviction-badge conviction-{{ c.conviction }}">{{ c.conviction }}</span>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:0.85rem;">
+          &pound;{{ "%.2f"|format(c.gbp_price) }}
+        </span>
+      </div>
+    </div>
+
+    {#- Score bars -#}
+    {% set score_dims = [
+      ('Growth', c.scores.growth, 0.40),
+      ('Diversification', c.scores.diversification, 0.25),
+      ('Risk-Adjusted', c.scores.risk_adjusted, 0.20),
+      ('Income', c.scores.income, 0.15),
+    ] %}
+    {% for label, score, weight in score_dims %}
+    <div class="score-row">
+      <span class="score-label">{{ label }} ({{ "%.0f"|format(weight*100) }}%)</span>
+      <div class="score-bar-bg">
+        <div class="score-bar-fill" style="width:{{ (score*100)|round }}%;
+          background: {% if score >= 0.70 %}var(--green){% elif score >= 0.55 %}var(--amber){% else %}var(--red){% endif %};">
+        </div>
+      </div>
+      <span class="score-value">{{ "%.2f"|format(score) }}</span>
+    </div>
+    {% endfor %}
+
+    {#- Composite score -#}
+    <div class="score-row" style="margin-top:0.5rem; font-weight:600;">
+      <span class="score-label">Composite</span>
+      <div class="score-bar-bg" style="height:10px;">
+        <div class="score-bar-fill" style="width:{{ (c.scores.composite*100)|round }}%; height:100%;
+          background: {% if c.scores.composite >= 0.70 %}var(--green){% elif c.scores.composite >= 0.55 %}var(--amber){% else %}var(--red){% endif %};">
+        </div>
+      </div>
+      <span class="score-value">{{ "%.2f"|format(c.scores.composite) }}</span>
+    </div>
+
+    {#- Risks -#}
+    {% if c.risks %}
+    <div style="margin-top:0.5rem;">
+      {% for risk in c.risks %}
+      <span class="risk-tag">{{ risk }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {#- Reasoning (collapsible) -#}
+    <div x-data="{ expanded: false }">
+      <button x-on:click="expanded = !expanded"
+              style="background:none; border:none; color:var(--cyan); font-size:0.8rem; cursor:pointer; padding:0; margin-top:0.5rem;">
+        <span x-text="expanded ? 'Hide reasoning' : 'Show reasoning'"></span>
+      </button>
+      <div x-show="expanded" x-cloak class="reasoning-block">
+        {% if c.reasoning is mapping %}
+          {% for key, text in c.reasoning.items() %}
+          <p style="margin:0 0 0.35rem;"><strong>{{ key|title }}:</strong> {{ text }}</p>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+
+    {#- Actions -#}
+    <div class="candidate-actions">
+      <a href="/ui/analyse?ticker={{ c.ticker }}"
+         class="btn"
+         style="background:var(--cyan); color:#000; font-weight:600; padding:0.4rem 1rem; border-radius:5px; font-size:0.8rem; text-decoration:none;">
+        Research {{ c.ticker }}
+      </a>
+      <button
+        hx-post="/ui/execute/deployment/checkpoint/approve"
+        hx-vals='{"ticker": "{{ c.ticker }}"}'
+        hx-target="#candidate-{{ c.ticker }}"
+        hx-swap="outerHTML"
+        class="btn"
+        style="background:var(--green); color:#000; font-weight:600; padding:0.4rem 1rem; border-radius:5px; font-size:0.8rem;"
+      >
+        Approve
+      </button>
+      <button
+        hx-post="/ui/execute/deployment/checkpoint/reject"
+        hx-vals='{"ticker": "{{ c.ticker }}"}'
+        hx-target="#candidate-{{ c.ticker }}"
+        hx-swap="outerHTML"
+        class="btn"
+        style="background:rgba(255,80,80,0.15); color:var(--red); font-weight:600; padding:0.4rem 1rem; border-radius:5px; font-size:0.8rem;"
+      >
+        Reject
+      </button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% include "deployment/_emergency_stop.html" %}
+{% endblock %}

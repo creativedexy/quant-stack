@@ -1,0 +1,20 @@
+{# Single purchase row — returned by POST /ui/portfolio/dca/purchase
+   for HTMX append into #purchase-tbody.
+   Context: purchase (enriched dict), ticker
+#}
+<tr>
+  <td class="font-mono">{{ purchase.date }}</td>
+  <td class="text-right font-mono">{{ "%.0f" | format(purchase.price) }}</td>
+  <td class="text-right font-mono">{{ purchase.amount_gbp | gbp }}</td>
+  <td class="text-right font-mono">{{ purchase.shares }}</td>
+  <td class="text-right font-mono">{{ purchase.get('current_value', 0) | gbp }}</td>
+  <td class="text-right font-mono {% if purchase.get('return_pct', 0) >= 0 %}badge-positive{% else %}badge-negative{% endif %}">
+    {{ purchase.get('return_pct', 0) | pct }}
+  </td>
+  <td>
+    <span class="ticker-chip" style="background: {{ {'best': '#22c55e', 'good': 'rgba(34,197,94,0.6)', 'neutral': '#f59e0b', 'late': '#ef4444'}.get(purchase.get('entry_quality', 'neutral'), '#6b7280') }}; color: #fff; font-size: 0.7rem;">
+      {{ purchase.get('entry_quality', 'neutral') }}
+    </span>
+  </td>
+  <td class="muted" style="font-size: 0.7rem;">{{ purchase.get('note', '') }}</td>
+</tr>

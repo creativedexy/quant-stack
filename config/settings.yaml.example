@@ -1,0 +1,152 @@
+# Quant Stack — Master Configuration (EXAMPLE)
+# Copy to config/settings.yaml and edit before running.
+# All ${ENV_VAR} placeholders are resolved at runtime.
+
+general:
+  base_currency: GBP
+  timezone: Europe/London
+  log_level: INFO
+  data_dir: data
+  random_seed: 42
+
+universe:
+  name: uk_large_cap
+  tickers:
+    - SHEL.L
+    - AZN.L
+    - HSBA.L
+    - ULVR.L
+    - BP.L
+    - RIO.L
+    - GSK.L
+    - LLOY.L
+    - VOD.L
+    - BT-A.L
+  benchmark: ^FTSE
+
+data:
+  source: yfinance             # synthetic | yfinance | alpha_vantage
+  start_date: "2018-01-01"
+  end_date: "2024-12-31"
+  interval: "1d"
+  fields: [Open, High, Low, Close, Volume]
+  adjust_prices: true
+  output_format: parquet
+
+  live:
+    price_cache_ttl: 60        # seconds
+    fallback_chain: [ib, yfinance, alpha_vantage, cached]
+    request_timeout: 10        # seconds per source
+
+features:
+  technical:
+    sma_windows: [5, 10, 20, 50, 200]
+    ema_windows: [12, 26]
+    rsi_window: 14
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    bb_window: 20
+    bb_num_std: 2.0
+    atr_window: 14
+  returns:
+    windows: [1, 5, 10, 21, 63, 252]
+    log_returns: true
+
+api_keys:
+  alpha_vantage: ${ALPHA_VANTAGE_API_KEY}
+models:
+  type: random_forest
+  output_dir: data/processed/models
+  target_column: forward_return_5d
+  cv_splits: 5
+  train_end: "2023-12-31"       # Last date for training data
+  test_start: "2024-01-01"      # First date for out-of-sample test
+  default_model:
+    class: GradientBoostingClassifier
+    params:
+      n_estimators: 300
+      learning_rate: 0.05
+      subsample: 0.8
+      max_depth: 3
+  random_forest:
+    n_estimators: 200
+    max_depth: 10
+  gradient_boosting:
+    n_estimators: 300
+    learning_rate: 0.05
+    subsample: 0.8
+  walk_forward:
+    train_months: 24
+    test_months: 3
+    step_months: 1
+  retrain_frequency: weekly    # 'weekly', 'monthly', or 'on_demand'
+  performance_threshold:
+    min_ic: 0.02               # Minimum information coefficient before alert
+
+portfolio:
+  optimisation:
+    method: mean_variance       # 'mean_variance', 'risk_parity', 'equal_weight'
+    risk_free_rate: 0.0425      # Current UK base rate
+  constraints:
+    max_weight: 0.20            # Maximum 20% in any single asset
+    min_weight: 0.02            # Minimum 2% if held
+    max_sector_weight: 0.40
+  rebalance:
+    frequency: monthly          # 'daily', 'weekly', 'monthly', 'quarterly'
+    threshold: 0.05             # Rebalance if drift exceeds 5%
+
+risk:
+  max_drawdown: 0.15            # Alert if portfolio drawdown exceeds 15%
+  max_correlation: 0.85         # Alert if pairwise correlation exceeds this
+  var_confidence: 0.95
+  position_limit: 0.25          # Max 25% in a single position
+
+backtest:
+  initial_capital: 100000
+  commission_pct: 0.001         # 10 bps
+  slippage_pct: 0.0005          # 5 bps
+  currency: GBP
+
+execution:
+  mode: paper                   # 'paper' or 'live' (live requires --live flag)
+  broker: ibkr
+  host: "127.0.0.1"
+  port: 7497                    # TWS paper trading port
+  client_id: 1
+
+scheduler:
+  daily_run_time: "17:30"       # 30 min after LSE close (16:30)
+  timezone: Europe/London
+  retrain_day: sunday            # Day of week for model retraining
+  retrain_time: "08:00"
+  enabled: true
+
+notebooks:
+  claude_model: "claude-sonnet-4-6"
+  log_path: "data/processed/research_log.jsonl"
+  system_prompt: >
+    You are a quantitative finance research assistant. You receive structured
+    data from a Python-based trading system and return concise, actionable
+    interpretations. Be specific about numbers. Flag risks prominently.
+    Suggest concrete next steps.
+
+ui:
+  auth:
+    username: admin
+    password: changeme               # Change before deploying
+
+alerts:
+  enabled: true
+  methods:
+    - log                        # Always log alerts
+  channels: []                   # ["email", "webhook"] to enable delivery
+  smtp:
+    host: smtp.example.com
+    port: 587
+    username: alerts@example.com
+    password: "${SMTP_PASSWORD}"
+    from_address: alerts@example.com
+    use_tls: true
+  webhook_url: ""
+  webhook_timeout_s: 10

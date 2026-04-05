@@ -1,0 +1,143 @@
+# Capital Deployment Engine configuration
+# All parameters for the autonomous scanning, analysis, and execution pipeline.
+
+evaluation:
+  weights:
+    growth_score: 0.40
+    diversification_score: 0.25
+    risk_adjusted_score: 0.20
+    income_score: 0.15
+
+  thresholds:
+    minimum_composite_score: 0.55
+    maximum_position_pct: 0.25
+    minimum_position_gbp: 50
+    maximum_correlation_to_existing: 0.60
+
+scanner:
+  universes:
+    us_growth:
+      source: alpha_vantage
+      fallback_source: yfinance
+      filter:
+        market_cap_min_usd: 10_000_000_000
+        sector_exclude:
+          - Energy
+          - Consumer Staples
+        exchange:
+          - NYSE
+          - NASDAQ
+      max_candidates: 20
+
+    sector_etfs:
+      source: yfinance
+      tickers:
+        - SMH
+        - SOXX
+        - XLK
+        - ICLN
+        - HACK
+        - PAVE
+        - IEMG
+        - VGT
+        - ARKK
+        - XBI
+        - KWEB
+        - EWJ
+      max_candidates: 12
+
+    contrarian_value:
+      source: yfinance
+      filter:
+        pe_ratio_max: 12
+        dividend_yield_min: 0.03
+        price_to_book_max: 1.5
+        market_cap_min_usd: 5_000_000_000
+        sector_include:
+          - Industrials
+          - Materials
+          - Utilities
+          - Real Estate
+      max_candidates: 10
+
+  global_exclusions:
+    structural: []
+
+  min_avg_daily_volume: 500_000
+  verify_ib_tradeable: true
+
+sizing:
+  method: fractional_kelly
+  kelly_fraction: 0.25
+
+  constraints:
+    max_position_pct: 0.25
+    min_position_gbp: 50
+    max_positions: 8
+    max_single_sector_pct: 0.35
+    cash_reserve_pct: 0.05
+
+  scaling:
+    tier_1:
+      label: "GBP 0 - 1,000"
+      min_capital: 0
+      max_capital: 1000
+      max_positions: 5
+      min_position_gbp: 50
+      prefer_etfs: true
+    tier_2:
+      label: "GBP 1,000 - 10,000"
+      min_capital: 1000
+      max_capital: 10000
+      max_positions: 8
+      min_position_gbp: 200
+      prefer_etfs: false
+    tier_3:
+      label: "GBP 10,000 - 100,000"
+      min_capital: 10000
+      max_capital: 100000
+      max_positions: 15
+      min_position_gbp: 500
+      prefer_etfs: false
+    tier_4:
+      label: "GBP 100,000+"
+      min_capital: 100000
+      max_capital: 999_999_999
+      max_positions: 25
+      min_position_gbp: 2000
+      prefer_etfs: false
+
+execution:
+  mode: LIVE
+  confirm_live: true
+  order_type_default: LIMIT
+  limit_price_buffer_pct: 0.005
+  market_order_volume_threshold: 1_000_000
+
+risk:
+  daily_loss_limit_pct: 0.10
+  price_drift_max_pct: 0.02
+  slippage_warning_pct: 0.005
+  sdrt_rate: 0.005
+  commission_estimate_gbp: 1.00
+
+opus:
+  model: claude-opus-4-20250514
+  max_tokens: 4096
+  timeout: 120
+  max_retries: 3
+  cost_warning_gbp: 5.00
+
+memory:
+  path: data/deployment/memory.json
+  cycles_dir: data/deployment/cycles
+  cooldown_days: 7
+  max_cycles_detail: 20
+
+pipeline:
+  max_retries: 3
+  approval_timeout_minutes: 1440
+
+fx:
+  default_gbp_usd: 1.27
+  default_gbp_eur: 1.17

@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+
+{% block title %}Overview — Quant Stack{% endblock %}
+
+{% block head %}
+<script src="/static/js/chart_hover.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="overview-layout">
+
+  {# ── ZONE A: Permanent Chat ──────────────────── #}
+  <div class="chat-zone">
+    {# Left: identity + messages + input #}
+    <div class="chat-left">
+      {# Identity strip #}
+      <div style="padding:8px 14px 0;display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <div style="width:24px;height:24px;border-radius:5px;background:var(--amber);
+          display:flex;align-items:center;justify-content:center;
+          font-size:9px;font-weight:700;color:#000;">QS</div>
+        <span style="font-size:11px;font-weight:600;color:var(--t1);">Quant Guide</span>
+        <span style="font-size:10px;color:var(--t2);">&middot; Claude-powered &middot; ask anything about the system</span>
+      </div>
+
+      {# Messages area #}
+      <div class="chat-messages" id="chatMessages">
+        <div class="msg msg-ai">
+          <div class="msg-avatar">QS</div>
+          <div class="msg-bubble">Welcome to <strong>Quant Stack</strong>. I can help you understand signals, run backtests, or navigate any part of the system. What would you like to know?</div>
+        </div>
+      </div>
+
+      {# Input bar #}
+      <div class="chat-input-bar">
+        <input type="text" id="chatIn"
+               placeholder="Ask about signals, how to backtest, what RSI means..."
+               onkeydown="chatSend(event)">
+        <button class="chat-send-btn" onclick="chatSend({key:'Enter'})" title="Send">&#8629;</button>
+      </div>
+    </div>
+
+    {# Right: suggested questions #}
+    <div class="chat-right">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);
+        text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;">Suggested Questions</div>
+      <button class="quick-pill" onclick="quickAsk('Why is BARC long signal firing?')">Why is BARC long signal firing?</button>
+      <button class="quick-pill" onclick="quickAsk('How do I run a backtest?')">How do I run a backtest?</button>
+      <button class="quick-pill" onclick="quickAsk('What does the RSI overlay show?')">What does the RSI overlay show?</button>
+      <button class="quick-pill" onclick="quickAsk('What is my portfolio risk?')">What is my portfolio risk?</button>
+      <button class="quick-pill" onclick="quickAsk('How does the DCA planner work?')">How does the DCA planner work?</button>
+    </div>
+  </div>
+
+  {# ── ZONE B: Navigation Tiles ────────────────── #}
+  <div class="tiles-zone">
+    {# 1. Watchlist #}
+    <a class="nav-tile active-page" href="/ui/watchlist" style="flex:1;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div class="tile-icon" style="background:var(--cyan-dim);color:var(--cyan);">&#9670;</div>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <span class="tile-status-dot s-live"></span>
+          <span class="tile-status-label" style="color:var(--green);">LIVE</span>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t1);">Watchlist</div>
+      <div style="font-size:10px;color:var(--t2);line-height:1.5;">FTSE tickers &middot; intraday charts &middot; fundamentals</div>
+      <span class="nav-tile-arrow">&#8594;</span>
+    </a>
+
+    {# 2. Chart Deep-Dive #}
+    <a class="nav-tile" href="/ui/chart" style="flex:1;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div class="tile-icon" style="background:var(--amber-dim);color:var(--amber);">&#11041;</div>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <span class="tile-status-dot s-live"></span>
+          <span class="tile-status-label" style="color:var(--green);">LIVE</span>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t1);">Chart Deep-Dive</div>
+      <div style="font-size:10px;color:var(--t2);line-height:1.5;">Bollinger &middot; RSI &middot; MACD &middot; Monte Carlo</div>
+      <span class="nav-tile-arrow">&#8594;</span>
+    </a>
+
+    {# 3. Portfolio #}
+    <a class="nav-tile" href="/ui/portfolio" style="flex:1;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div class="tile-icon" style="background:var(--green-dim);color:var(--green);">&#9638;</div>
+        <div style="display:flex;gap:4px;align-items:center;">
+          {% if signal_count > 0 %}
+          <span class="tile-status-dot s-action"></span>
+          <span class="tile-status-label" style="color:var(--amber);">{{ signal_count }} SIGNALS</span>
+          {% else %}
+          <span class="tile-status-dot s-idle"></span>
+          <span class="tile-status-label" style="color:var(--t3);">IDLE</span>
+          {% endif %}
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t1);">Portfolio</div>
+      <div style="font-size:10px;color:var(--t2);line-height:1.5;">Heatmap &middot; VaR &middot; DCA planner</div>
+      <span class="nav-tile-arrow">&#8594;</span>
+    </a>
+
+    {# 4. Research #}
+    <a class="nav-tile" href="/ui/research" style="flex:1;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div class="tile-icon" style="background:rgba(167,139,250,.1);color:var(--purple);">&#11041;</div>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <span class="tile-status-dot s-idle"></span>
+          <span class="tile-status-label" style="color:var(--t3);">IDLE</span>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t1);">Research</div>
+      <div style="font-size:10px;color:var(--t2);line-height:1.5;">Upload papers &middot; backtest &middot; Claude analysis</div>
+      <span class="nav-tile-arrow">&#8594;</span>
+    </a>
+
+    {# 5. News Feed #}
+    <a class="nav-tile" href="/ui/news" style="flex:1;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div class="tile-icon" style="background:var(--red-dim);color:var(--red);">&#9678;</div>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <span class="tile-status-dot s-live"></span>
+          {% if unread_news > 0 %}
+          <span class="tile-status-label" style="color:var(--green);">{{ unread_news }} NEW</span>
+          {% else %}
+          <span class="tile-status-label" style="color:var(--green);">LIVE</span>
+          {% endif %}
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t1);">News Feed</div>
+      <div style="font-size:10px;color:var(--t2);line-height:1.5;">AI-filtered &middot; sentiment &middot; signal impact</div>
+      <span class="nav-tile-arrow">&#8594;</span>
+    </a>
+
+    {# 6. Capital Deployment #}
+    <a class="nav-tile" href="/ui/execute/deployment" style="flex:1;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div class="tile-icon" style="background:rgba(255,255,255,.04);color:var(--t2);">&#9655;</div>
+        <div style="display:flex;gap:4px;align-items:center;">
+          {% if exec_mode == 'live' %}
+          <span class="tile-status-dot s-action"></span>
+          <span class="tile-status-label" style="color:var(--amber);">LIVE</span>
+          {% else %}
+          <span class="tile-status-dot s-idle"></span>
+          <span class="tile-status-label" style="color:var(--t3);">PAPER</span>
+          {% endif %}
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t1);">Capital Deployment</div>
+      <div style="font-size:10px;color:var(--t2);line-height:1.5;">Scan &middot; analyse &middot; size &middot; trade</div>
+      <span class="nav-tile-arrow">&#8594;</span>
+    </a>
+  </div>
+
+  {# ── ZONE C: Snapshot Panels ─────────────────── #}
+  <div class="snapshot-zone">
+    {# Left panel: Watchlist Snapshot #}
+    <div class="snapshot-panel" style="border-right:1px solid var(--border);">
+      <div class="snapshot-panel-header">
+        <span class="snapshot-panel-title">Watchlist</span>
+        <a class="snapshot-panel-link" href="/ui/watchlist">View full watchlist &rarr;</a>
+      </div>
+      <div class="snapshot-panel-body">
+        {% for row in watchlist_rows %}
+          {% include "partials/wl_row.html" %}
+        {% endfor %}
+      </div>
+      <div class="wl-add-row" id="wl-add-row">
+        <input class="wl-add-in" id="wlAddIn" placeholder="Add ticker  e.g. LLOY.L"
+               onkeydown="if(event.key==='Enter')wlAdd()">
+        <button class="wl-add-btn"
+                hx-post="/ui/watchlist/add"
+                hx-include="#wlAddIn"
+                hx-target="#wl-add-row"
+                hx-swap="beforebegin"
+                onclick="return false;">+ Add</button>
+      </div>
+    </div>
+
+    {# Right panel: News Snapshot #}
+    <div class="snapshot-panel">
+      <div class="snapshot-panel-header">
+        <span class="snapshot-panel-title">Latest News</span>
+        <a class="snapshot-panel-link" href="/ui/news">View all &rarr;</a>
+      </div>
+      <div class="snapshot-panel-body">
+        {% if news_items %}
+          {% for item in news_items %}
+          <div class="news-snap-item" x-data="{ open: false }" x-on:click="open = !open">
+            <div style="display:flex;align-items:center;gap:6px;">
+              {% if item.tickers %}
+              <span class="nticker">{{ item.tickers[0] if item.tickers is iterable and item.tickers | length > 0 else '' }}</span>
+              {% endif %}
+              <span style="font-size:12px;font-weight:600;color:var(--t1);
+                white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">{{ item.get('title', item.get('headline', '')) }}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+              {% set sent = item.get('sentiment', 'neutral') | lower %}
+              <span class="sent-{{ 'bull' if sent == 'bullish' else 'bear' if sent == 'bearish' else 'mixed' if sent == 'mixed' else 'neut' }}">
+                {{ sent | upper }}
+              </span>
+              <span style="font-family:var(--mono);font-size:10px;color:var(--t2);">{{ item.get('source', '') }}</span>
+              <span style="font-family:var(--mono);font-size:10px;color:var(--t2);margin-left:auto;">{{ item.get('age', item.get('published', '')) }}</span>
+            </div>
+            <div class="news-expand" x-show="open" x-cloak
+                 style="background:rgba(245,158,11,.05);border-left:2px solid var(--amber);
+                   border-radius:0 4px 4px 0;padding:8px 10px;font-size:11px;
+                   color:var(--t2);margin-top:6px;">
+              {{ item.get('summary', item.get('description', 'No summary available.')) }}
+              {% if item.get('impact') %}
+              <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+                <span style="font-size:10px;color:var(--t2);text-transform:uppercase;letter-spacing:.03em;">Impact:</span>
+                {% set imp = item.get('impact', '') | lower %}
+                <span class="impact-chip impact-{{ 'strengthens' if 'strengthen' in imp or 'corroborate' in imp else 'contradicts' if 'contradict' in imp or 'watch' in imp else 'other' }}">
+                  {{ item.get('impact', '') }}
+                </span>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="news-snap-item" style="color:var(--t2);font-size:12px;">
+            No news loaded yet. The scheduler will fetch articles every 15 minutes.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# Spinner (hidden by default, shown by HTMX during requests) #}
+<div id="spinner" class="htmx-indicator spinner"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Guide Chat -- keyword fallback + HTMX SSE */
+function chatSend(e) {
+  if (e.key !== 'Enter') return;
+  var input = document.getElementById('chatIn');
+  var msg = (input.value || '').trim();
+  if (!msg) return;
+  input.value = '';
+
+  var area = document.getElementById('chatMessages');
+
+  // Append user bubble
+  var userDiv = document.createElement('div');
+  userDiv.className = 'msg msg-user';
+  userDiv.innerHTML =
+    '<div class="msg-avatar">U</div>' +
+    '<div class="msg-bubble"></div>';
+  userDiv.querySelector('.msg-bubble').textContent = msg;
+  area.appendChild(userDiv);
+  area.scrollTop = area.scrollHeight;
+
+  // Append typing indicator
+  var typingDiv = document.createElement('div');
+  typingDiv.className = 'msg msg-ai';
+  typingDiv.id = 'typing-indicator';
+  typingDiv.innerHTML =
+    '<div class="msg-avatar">QS</div>' +
+    '<div class="msg-bubble"><span class="typing-dots"><span></span><span></span><span></span></span></div>';
+  area.appendChild(typingDiv);
+  area.scrollTop = area.scrollHeight;
+
+  // POST to guide chat
+  fetch('/ui/guide/chat', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'message=' + encodeURIComponent(msg)
+  }).then(function(resp) {
+    return resp.text();
+  }).then(function(text) {
+    // Parse SSE data lines
+    var lines = text.split('\n');
+    var content = '';
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith('data: ') && lines[i].indexOf('[DONE]') === -1) {
+        content += lines[i].substring(6);
+      }
+    }
+
+    // Remove typing indicator
+    var typing = document.getElementById('typing-indicator');
+    if (typing) typing.remove();
+
+    // Append AI response
+    var aiDiv = document.createElement('div');
+    aiDiv.className = 'msg msg-ai';
+    aiDiv.innerHTML =
+      '<div class="msg-avatar">QS</div>' +
+      '<div class="msg-bubble"></div>';
+    aiDiv.querySelector('.msg-bubble').textContent = content || 'I can help with that.';
+    area.appendChild(aiDiv);
+    area.scrollTop = area.scrollHeight;
+  }).catch(function() {
+    var typing = document.getElementById('typing-indicator');
+    if (typing) typing.remove();
+    var errDiv = document.createElement('div');
+    errDiv.className = 'msg msg-ai';
+    errDiv.innerHTML =
+      '<div class="msg-avatar">QS</div>' +
+      '<div class="msg-bubble">Sorry, I could not connect. Please try again.</div>';
+    area.appendChild(errDiv);
+    area.scrollTop = area.scrollHeight;
+  });
+}
+
+function quickAsk(text) {
+  document.getElementById('chatIn').value = text;
+  chatSend({key: 'Enter'});
+}
+
+function wlAdd() {
+  var input = document.getElementById('wlAddIn');
+  var ticker = (input.value || '').trim().toUpperCase();
+  if (!ticker) return;
+  input.value = '';
+
+  htmx.ajax('POST', '/ui/watchlist/add', {
+    target: '#wl-add-row',
+    swap: 'beforebegin',
+    values: {ticker: ticker}
+  });
+}
+</script>
+{% endblock %}

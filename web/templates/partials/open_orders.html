@@ -1,0 +1,33 @@
+{# Open orders fragment -- polled via HTMX every 10s #}
+{% if open_orders %}
+<table class="feature-table">
+  <thead>
+    <tr>
+      <th>Ticker</th>
+      <th>Side</th>
+      <th class="text-right">Qty</th>
+      <th class="text-right">Price</th>
+      <th>Status</th>
+      <th class="muted">Time</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for order in open_orders %}
+    <tr>
+      <td><span class="ticker-chip">{{ order.ticker }}</span></td>
+      <td>
+        <span class="{{ 'badge-positive' if order.side == 'BUY' else 'badge-negative' }}">
+          {{ order.side }}
+        </span>
+      </td>
+      <td class="text-right font-mono">{{ order.qty }}</td>
+      <td class="text-right font-mono">{{ order.price | gbp }}</td>
+      <td>{{ order.status }}</td>
+      <td class="muted">{{ order.time }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="skeleton-text">No open orders</p>
+{% endif %}

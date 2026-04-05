@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Capital Deployment | Quant Stack{% endblock %}
+
+{% block head %}
+<style>
+  .deploy-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem; margin-bottom: 1.5rem;
+  }
+  .deploy-stat-card {
+    background: var(--card); border-radius: 8px; padding: 1rem 1.25rem;
+    border: 1px solid var(--border);
+  }
+  .deploy-stat-label {
+    font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.05em; margin-bottom: 0.25rem;
+  }
+  .deploy-stat-value {
+    font-family: 'IBM Plex Mono', monospace; font-size: 1.5rem; font-weight: 600;
+  }
+  .deploy-actions {
+    display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.5rem;
+  }
+  .deploy-section {
+    background: var(--card); border-radius: 8px; padding: 1.25rem;
+    border: 1px solid var(--border); margin-bottom: 1.25rem;
+  }
+  .deploy-section h3 {
+    margin: 0 0 0.75rem; font-size: 1rem;
+  }
+  .status-badge {
+    display: inline-block; padding: 0.2rem 0.6rem; border-radius: 4px;
+    font-size: 0.75rem; font-weight: 600; letter-spacing: 0.03em;
+  }
+  .status-idle { background: var(--card-alt); color: var(--text-muted); }
+  .status-running { background: rgba(0, 200, 150, 0.15); color: var(--green); }
+  .status-complete { background: rgba(0, 200, 150, 0.15); color: var(--green); }
+  .status-halted { background: rgba(255, 80, 80, 0.15); color: var(--red); }
+  .status-awaiting { background: rgba(255, 180, 0, 0.15); color: var(--amber); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" id="deployment-content">
+  {% include "deployment/_dashboard_content.html" %}
+</div>
+
+{% include "deployment/_emergency_stop.html" %}
+{% endblock %}

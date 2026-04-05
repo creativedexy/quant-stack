@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ persona.name }} — Quant Stack{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+  <div>
+    <a href="/ui/research" style="font-size:0.8rem; color:var(--text-secondary);">< Back to Research</a>
+    <h1 style="margin:0.25rem 0 0 0;">{{ persona.name }}</h1>
+  </div>
+  <span class="badge {{ persona.state_class | default('badge-grey') }}"
+        style="font-size:0.8rem; padding:0.3rem 0.8rem; border-radius:4px;">
+    {{ persona.state | upper }}
+  </span>
+</div>
+
+{#- Info grid -#}
+<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+  <div class="card" style="padding:1rem;">
+    <span class="text-muted" style="font-size:0.7rem;">Strategy</span>
+    <div class="font-mono" style="font-size:1rem;">{{ persona.strategy }}</div>
+  </div>
+  <div class="card" style="padding:1rem;">
+    <span class="text-muted" style="font-size:0.7rem;">Budget</span>
+    <div class="font-mono" style="font-size:1rem;">{{ "%.0f" | format(persona.capital_pct * 100) }}%</div>
+  </div>
+  <div class="card" style="padding:1rem;">
+    <span class="text-muted" style="font-size:0.7rem;">Type</span>
+    <div style="font-size:1rem;">{{ persona.type | replace('_', ' ') | title }}</div>
+  </div>
+  <div class="card" style="padding:1rem;">
+    <span class="text-muted" style="font-size:0.7rem;">Signal Method</span>
+    <div class="font-mono" style="font-size:0.9rem;">{{ persona.signal_method | replace('_', ' ') }}</div>
+  </div>
+</div>
+
+{#- Universe -#}
+<div class="card" style="padding:1rem 1.5rem; margin-bottom:1.5rem;">
+  <h3 style="margin:0 0 0.5rem 0; font-size:0.9rem;">Universe</h3>
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+    {%- for ticker in persona.universe %}
+    <span class="badge badge-grey font-mono" style="font-size:0.75rem; padding:0.2rem 0.5rem;">
+      {{ ticker }}
+    </span>
+    {%- endfor %}
+  </div>
+</div>
+
+{#- Risk parameters -#}
+{% if persona.risk_params %}
+<div class="card" style="padding:1rem 1.5rem; margin-bottom:1.5rem;">
+  <h3 style="margin:0 0 0.5rem 0; font-size:0.9rem;">Risk Parameters</h3>
+  <div style="display:flex; gap:2rem; flex-wrap:wrap; font-size:0.85rem;">
+    {%- for key, value in persona.risk_params.items() %}
+    <div>
+      <span class="text-muted">{{ key | replace('_', ' ') | title }}:</span>
+      <span class="font-mono">
+        {%- if value is number and value < 1 %}{{ "%.0f" | format(value * 100) }}%
+        {%- else %}{{ value }}
+        {%- endif %}
+      </span>
+    </div>
+    {%- endfor %}
+  </div>
+</div>
+{% endif %}
+
+{#- Mandate -#}
+{% if persona.mandate %}
+<div class="card" style="padding:1rem 1.5rem; margin-bottom:1.5rem;">
+  <h3 style="margin:0 0 0.5rem 0; font-size:0.9rem;">Mandate</h3>
+  <div style="font-size:0.85rem; line-height:1.5; white-space:pre-wrap; color:var(--text-secondary);">{{ persona.mandate }}</div>
+</div>
+{% endif %}
+
+{#- Actions + brief -#}
+<div style="display:flex; gap:0.5rem; margin-bottom:1rem;" x-data="{ confirmAction: '' }">
+  {%- if persona.state == 'active' %}
+  <button class="btn btn-sm"
+          hx-post="/ui/personas/{{ persona.persona_id }}/brief"
+          hx-target="#detail-brief"
+          hx-swap="innerHTML">
+    Generate Brief Now
+  </button>
+  {%- endif %}
+
+  {%- if persona.state == 'pending' %}
+  <button class="btn btn-sm btn-green"
+          hx-post="/ui/personas/{{ persona.persona_id }}/activate"
+          hx-target="#persona-card-{{ persona.persona_id }}"
+          hx-swap="innerHTML">
+    Activate
+  </button>
+  {%- endif %}
+
+  {%- if persona.state == 'dormant' %}
+  <button class="btn btn-sm btn-outline"
+          hx-post="/ui/personas/{{ persona.persona_id }}/activate"
+          hx-target="#persona-card-{{ persona.persona_id }}"
+          hx-swap="innerHTML">
+    Force Activate
+  </button>
+  {%- endif %}
+</div>
+
+{#- Latest brief -#}
+<div id="detail-brief">
+  {% set brief = persona.latest_brief %}
+  {% include "partials/persona_brief.html" %}
+</div>
+{% endblock %}

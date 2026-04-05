@@ -1,0 +1,42 @@
+{#- Research brief panel — loaded via HTMX into the persona card or detail page -#}
+{%- if brief %}
+<div class="card" style="padding:1rem; margin-top:0.75rem; border-left:3px solid var(--accent);">
+  <div style="font-size:0.7rem; color:var(--text-secondary); margin-bottom:0.5rem;">
+    Brief generated: {{ brief.timestamp[:16] | replace('T', ' ') }}
+    {%- if brief.event_trigger %}
+     | Trigger: {{ brief.event_trigger }}
+    {%- endif %}
+  </div>
+
+  {#- Narrative -#}
+  <div style="font-size:0.85rem; line-height:1.5; white-space:pre-wrap; margin-bottom:1rem;">{{ brief.narrative }}</div>
+
+  {#- Trade recommendations -#}
+  {%- if brief.recommendations %}
+  <h4 style="font-size:0.8rem; margin:0 0 0.5rem 0; color:var(--text-secondary);">Trade Recommendations</h4>
+  <div style="display:flex; flex-direction:column; gap:0.5rem;">
+    {%- for rec in brief.recommendations %}
+    <div class="card" style="padding:0.75rem; display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <span class="badge {% if rec.direction == 'BUY' %}badge-green{% else %}badge-red{% endif %}"
+              style="font-size:0.65rem; padding:0.15rem 0.4rem;">
+          {{ rec.direction }}
+        </span>
+        <strong style="margin-left:0.5rem;">{{ rec.ticker }}</strong>
+      </div>
+      <div style="text-align:right; font-size:0.8rem;">
+        <div class="font-mono">{{ rec.suggested_quantity }} shares @ {{ "%.2f" | format(rec.entry_price) }}</div>
+        <div class="text-muted" style="font-size:0.7rem;">~GBP {{ "{:,.0f}".format(rec.suggested_size_gbp) }}</div>
+      </div>
+    </div>
+    {%- endfor %}
+  </div>
+  {%- else %}
+  <p class="text-muted" style="font-size:0.8rem;">No trade recommendations at this time.</p>
+  {%- endif %}
+</div>
+{%- else %}
+<div style="font-size:0.8rem; color:var(--text-secondary); padding:0.5rem;">
+  No brief generated. Click "Generate Brief" to create one.
+</div>
+{%- endif %}

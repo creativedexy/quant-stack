@@ -1,0 +1,27 @@
+{# Order list partial -- swapped via HTMX when filtering by status.
+   Expects: orders (list of order dicts)
+#}
+{% if orders %}
+  {% for order in orders %}
+  <div class="order-row">
+    <span class="status-dot status-dot-{{ order.status }}"></span>
+    <span class="font-mono text-cyan" style="font-size:0.85rem;">{{ order.ticker }}</span>
+    <span class="direction-chip direction-{{ order.direction | lower }}">{{ order.direction }}</span>
+    <div class="order-desc">
+      {{ order.description }}
+      {% if order.status == 'rejected' and order.get('reject_reason') %}
+        <div class="order-reject">{{ order.reject_reason }}</div>
+      {% endif %}
+    </div>
+    {% if order.fill_price %}
+      <span class="font-mono" style="font-size:0.75rem;">{{ order.fill_price | gbp }}</span>
+    {% endif %}
+    <span class="order-meta">{{ order.timestamp }}</span>
+    {% if order.source %}
+      <span class="chip-source chip-{{ order.source }}">{{ order.source }}</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="text-muted" style="font-size:0.8rem;">No orders yet -- your first trade will appear here</p>
+{% endif %}

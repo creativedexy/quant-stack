@@ -1,0 +1,64 @@
+{# Ticker bar partial -- reusable across pages.
+   Expects: ticker, company_name, price, change_pct, logo_colour
+   Optional: active_period (default '1M'), watchlist_groups (for selector)
+#}
+{% set active_period = active_period | default('1M') %}
+<div class="card" style="display:flex;align-items:center;gap:1rem;padding:0.75rem 1.25rem;margin-bottom:0;">
+  {# Coloured logo square #}
+  <div style="width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:0.9rem;flex-shrink:0;background:{{ logo_colour | default('#555') }};">
+    {{ ticker[:2] | upper }}
+  </div>
+  {# Company name + ticker + watchlist selector #}
+  <div style="flex:1;min-width:0;position:relative;" x-data="{ pickerOpen: false }">
+    <div style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;" @click="pickerOpen = !pickerOpen">
+      <div style="font-weight:600;font-size:0.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ company_name }}</div>
+      {% if watchlist_groups is defined and watchlist_groups %}
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0;opacity:0.5;transition:transform 0.2s;" :style="pickerOpen && 'transform:rotate(180deg)'">
+        <path d="M3 5L6 8L9 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      {% endif %}
+    </div>
+    <div class="text-cyan font-mono" style="font-size:0.75rem;">{{ ticker }}</div>
+
+    {# Watchlist dropdown #}
+    {% if watchlist_groups is defined and watchlist_groups %}
+    <div x-show="pickerOpen" @click.away="pickerOpen = false"
+         x-transition:enter="transition ease-out duration-100"
+         x-transition:enter-start="opacity-0 transform -translate-y-1"
+         x-transition:enter-end="opacity-100 transform translate-y-0"
+         style="position:absolute;top:100%;left:0;z-index:50;min-width:280px;max-height:400px;overflow-y:auto;margin-top:0.5rem;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.4);padding:0.5rem 0;">
+      {% for group in watchlist_groups %}
+      <div style="padding:0.3rem 1rem;font-size:0.65rem;color:var(--t2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;">{{ group.name }}</div>
+      {% for item in group.entries %}
+      <a href="/ui/analyse?ticker={{ item.ticker }}"
+         style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 1rem;text-decoration:none;color:var(--t1);font-size:0.85rem;{% if item.ticker == ticker %}background:var(--border);{% endif %}"
+         onmouseover="this.style.background='var(--border-hi)'" onmouseout="this.style.background='{% if item.ticker == ticker %}var(--border){% endif %}'">
+        <span class="font-mono text-cyan" style="font-size:0.75rem;min-width:70px;">{{ item.ticker }}</span>
+        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.name }}</span>
+      </a>
+      {% endfor %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {# Price + change #}
+  <div style="text-align:right;flex-shrink:0;">
+    <span class="font-mono{% if change_pct is defined and change_pct >= 0 %} text-green{% else %} text-red{% endif %}" style="font-size:1.25rem;font-weight:600;">
+      {{ price | gbp if price is defined else '--' }}
+    </span>
+    {% if change_pct is defined %}
+    <span class="chip {% if change_pct >= 0 %}chip-green{% else %}chip-red{% endif %}" style="margin-left:0.5rem;">
+      {{ change_pct | pct | safe }}
+    </span>
+    {% endif %}
+  </div>
+  {# Period buttons #}
+  <div style="display:flex;gap:0.25rem;margin-left:1rem;">
+    {% for p in ['1D','1W','1M','3M','6M','1Y'] %}
+    <button class="btn btn-sm{% if p == active_period %} text-amber{% endif %}"
+            hx-get="/ui/analyse/chart?ticker={{ ticker }}&period={{ p }}"
+            hx-target="#chart-zone"
+            hx-swap="innerHTML">{{ p }}</button>
+    {% endfor %}
+  </div>
+</div>

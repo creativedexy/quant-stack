@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Analyse {{ ticker }} | Quant Stack{% endblock %}
+
+{% block head %}
+<style>
+  .overlay-btn { position: relative; }
+  .overlay-btn.active {
+    background: var(--border-hi);
+    color: var(--t1);
+  }
+  .overlay-btn .ov-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    display: inline-block; margin-right: 0.3rem;
+  }
+  .glance-strip {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    padding: 0.6rem 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .glance-item { text-align: center; min-width: 0; }
+  .glance-item .glance-val { font-family: var(--mono); font-size: 0.9rem; font-weight: 600; }
+  .glance-item .glance-label { font-size: 0.65rem; color: var(--t2); text-transform: uppercase; letter-spacing: 0.04em; }
+  .glance-divider { width: 1px; height: 28px; background: var(--border); flex-shrink: 0; }
+</style>
+{% endblock %}
+
+{% block ticker_bar %}
+  {% include "partials/ticker_bar.html" %}
+{% endblock %}
+
+{% block content %}
+{# At a Glance -- horizontal strip above the chart #}
+<div class="card glance-strip">
+  <div class="glance-item">
+    <div class="glance-val">{{ glance.market_cap | default('--') }}</div>
+    <div class="glance-label">Market Cap</div>
+  </div>
+  <div class="glance-divider"></div>
+  <div class="glance-item">
+    <div class="glance-val">{{ glance.dividend_yield | default('--') }}</div>
+    <div class="glance-label">Dividend Yield</div>
+  </div>
+  <div class="glance-divider"></div>
+  <div class="glance-item">
+    <div class="glance-val">{{ glance.day_range | default('--') }}</div>
+    <div class="glance-label">Today's Range</div>
+  </div>
+  <div class="glance-divider"></div>
+  <div class="glance-item">
+    <div class="glance-val">{{ glance.year_range | default('--') }}</div>
+    <div class="glance-label">52-Week Range</div>
+  </div>
+  <div class="glance-divider"></div>
+  <div class="glance-item">
+    <div class="glance-val">{{ glance.volume | default('--') }}</div>
+    <div class="glance-label">Volume</div>
+  </div>
+  <div class="glance-divider"></div>
+  <div class="glance-item">
+    <div class="glance-val">{{ glance.pe_ratio | default('--') }}</div>
+    <div class="glance-label">P/E Ratio</div>
+  </div>
+</div>
+
+<div style="display:flex;gap:1rem;align-items:flex-start;">
+  {# LEFT -- Chart Zone #}
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:0.75rem;">
+
+    {# Chart zone -- toolbar + chart + sub-panels, all re-render together #}
+    <div id="chart-zone">
+      {% include "partials/analyse_chart.html" %}
+    </div>
+  </div>
+
+  {# RIGHT -- Signal Zone #}
+  <div style="width:380px;flex-shrink:0;display:flex;flex-direction:column;gap:0.75rem;max-height:calc(100vh - 8rem);overflow-y:auto;"
+       id="signal-zone">
+    {% include "partials/analyse_signal.html" %}
+  </div>
+</div>
+{% endblock %}
